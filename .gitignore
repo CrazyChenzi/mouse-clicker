@@ -137,3 +137,11 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Electron build output
+out/
+dist/
+
+# Claude Code internal files
+.claude/
+.npmrc-builds
