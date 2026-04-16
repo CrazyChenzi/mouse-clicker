@@ -21,6 +21,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ── Step 1: Bump version, commit, tag, create Release ─────────────────────
   prepare:
