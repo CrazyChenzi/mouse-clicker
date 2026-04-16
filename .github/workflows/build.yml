@@ -1,24 +1,17 @@
 name: Build & Release
 
 on:
-  # Triggered when a git tag v*.*.* is pushed manually
   push:
     tags:
       - 'v*.*.*'
-
-  # Triggered when a Release is created in the GitHub UI
   release:
     types: [created]
-
-  # Manually trigger and attach artifacts to an existing release
   workflow_dispatch:
     inputs:
       tag:
         description: 'Release tag to attach artifacts to (e.g. v1.0.0)'
         required: true
         type: string
-
-  # Called by release.yml to build after auto-tagging
   workflow_call:
     inputs:
       tag:
@@ -29,23 +22,21 @@ on:
 permissions:
   contents: write
 
-# Resolve the target tag across all trigger types:
-# workflow_call (from release.yml) → inputs.tag
-# push: tags                       → github.ref_name
-# release: [created]               → github.event.release.tag_name
-# workflow_dispatch                → inputs.tag
-env:
-  TARGET_TAG: ${{ inputs.tag || github.ref_name || github.event.release.tag_name }}
-
 jobs:
   # ── macOS arm64 (Apple Silicon) ─────────────────────────────────────────────
   build-mac-arm64:
     name: macOS arm64
     runs-on: macos-latest
+    env:
+      # inputs is accessible in job-level env (NOT workflow-level env for workflow_call)
+      TARGET_TAG: ${{ inputs.tag || github.ref_name || github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: refs/tags/${{ env.TARGET_TAG }}
+        # No explicit ref: GitHub uses the event's default checkout
+        # push:tags       → checks out the pushed tag automatically
+        # release:created → checks out the release target commit
+        # workflow_call   → checks out the caller's branch (main w/ version bump)
+        # workflow_dispatch → checks out the default branch
 
       - uses: pnpm/action-setup@v4
         with:
@@ -79,10 +70,10 @@ jobs:
   build-win:
     name: Windows x64
     runs-on: windows-latest
+    env:
+      TARGET_TAG: ${{ inputs.tag || github.ref_name || github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: refs/tags/${{ env.TARGET_TAG }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -120,6 +111,8 @@ jobs:
     name: Upload to Release
     needs: [build-mac-arm64, build-win]
     runs-on: ubuntu-latest
+    env:
+      TARGET_TAG: ${{ inputs.tag || github.ref_name || github.event.release.tag_name }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -137,13 +130,7 @@ jobs:
       - name: Upload artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # Works for all three trigger types:
-          # - push tag     → github.ref_name
-          # - release UI   → github.event.release.tag_name
-          # - manual run   → inputs.tag
           tag_name: ${{ env.TARGET_TAG }}
-          # If the release already exists, just upload files (don't overwrite)
-          # If it doesn't exist yet, create a draft
           draft: ${{ github.event_name != 'release' }}
           generate_release_notes: ${{ github.event_name != 'release' }}
           files: dist/*

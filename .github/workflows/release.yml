@@ -76,8 +76,14 @@ jobs:
 
       - name: Push commit and tag
         run: |
-          git tag ${{ steps.bump.outputs.tag }}
+          # Push the version bump commit to main
           git push origin HEAD:main
+          # Create and push the tag (fail clearly if it already exists)
+          if git ls-remote --tags origin "${{ steps.bump.outputs.tag }}" | grep -q "${{ steps.bump.outputs.tag }}"; then
+            echo "::error::Tag ${{ steps.bump.outputs.tag }} already exists on remote. Delete it first or choose a different version."
+            exit 1
+          fi
+          git tag ${{ steps.bump.outputs.tag }}
           git push origin ${{ steps.bump.outputs.tag }}
 
       - name: Create draft GitHub Release
