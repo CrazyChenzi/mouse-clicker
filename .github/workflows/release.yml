@@ -1,0 +1,101 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch    # x.x.N → x.x.N+1
+          - minor    # x.N.x → x.N+1.0
+          - major    # N.x.x → N+1.0.0
+          - custom
+      custom_version:
+        description: 'Custom version without v prefix (e.g. 2.0.0) — only when type=custom'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  # ── Step 1: Bump version, commit, tag, create Release ─────────────────────
+  prepare:
+    name: Bump version & create tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+      version: ${{ steps.bump.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Use GITHUB_TOKEN with write permission to push commits and tags
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version in package.json
+        id: bump
+        run: |
+          if [ "${{ inputs.version_type }}" = "custom" ]; then
+            NEW_VER="${{ inputs.custom_version }}"
+            NEW_VER="${NEW_VER#v}"   # strip leading 'v' if present
+            node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+              pkg.version = process.argv[1];
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            " "$NEW_VER"
+          else
+            # npm version updates package.json and prints the new version (e.g. v1.0.1)
+            npm version ${{ inputs.version_type }} --no-git-tag-version
+            NEW_VER=$(node -p "require('./package.json').version")
+          fi
+          echo "version=$NEW_VER" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW_VER"    >> "$GITHUB_OUTPUT"
+
+      - name: Show new version
+        run: echo "Releasing version ${{ steps.bump.outputs.tag }}"
+
+      - name: Commit version bump
+        run: |
+          git add package.json
+          git commit -m "chore: release ${{ steps.bump.outputs.tag }}"
+
+      - name: Push commit and tag
+        run: |
+          git tag ${{ steps.bump.outputs.tag }}
+          git push origin HEAD:main
+          git push origin ${{ steps.bump.outputs.tag }}
+
+      - name: Create draft GitHub Release
+        run: |
+          gh release create ${{ steps.bump.outputs.tag }} \
+            --title "${{ steps.bump.outputs.tag }}" \
+            --generate-notes \
+            --draft
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Step 2: Build all platforms (reuse build.yml) ─────────────────────────
+  build:
+    name: Build
+    needs: prepare
+    uses: ./.github/workflows/build.yml
+    with:
+      tag: ${{ needs.prepare.outputs.tag }}
+    secrets: inherit
+    permissions:
+      contents: write
