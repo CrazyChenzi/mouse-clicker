@@ -117,6 +117,9 @@ jobs:
     env:
       TARGET_TAG: ${{ inputs.tag || github.ref_name || github.event.release.tag_name }}
     steps:
+      - uses: actions/checkout@v4
+        # Needed for gh CLI authentication and git ls-remote
+
       - uses: actions/download-artifact@v4
         with:
           name: dist-mac-arm64
@@ -130,12 +133,34 @@ jobs:
       - name: List artifacts
         run: ls -lh dist/
 
-      - name: Upload artifacts to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TARGET_TAG }}
-          draft: ${{ github.event_name != 'release' }}
-          generate_release_notes: ${{ github.event_name != 'release' }}
-          files: dist/*
+      - name: Verify tag exists on remote
+        # Ensures the release is always created FROM an existing tag,
+        # never the other way around (GitHub auto-creating a tag from a release).
+        run: |
+          if ! git ls-remote --tags origin "refs/tags/$TARGET_TAG" | grep -q .; then
+            echo "::error::Tag $TARGET_TAG not found on remote. Push the tag before creating a release."
+            exit 1
+          fi
+          echo "✓ Tag $TARGET_TAG confirmed on remote."
+
+      - name: Create draft release from tag (if not exists)
+        # --verify-tag: gh will error instead of auto-creating a missing tag
+        # If the release already exists (e.g. release:created trigger), skip silently
+        run: |
+          if ! gh release view "$TARGET_TAG" > /dev/null 2>&1; then
+            gh release create "$TARGET_TAG" \
+              --title "$TARGET_TAG" \
+              --generate-notes \
+              --draft \
+              --verify-tag
+            echo "✓ Draft release $TARGET_TAG created."
+          else
+            echo "Release $TARGET_TAG already exists, uploading artifacts."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts to release
+        run: gh release upload "$TARGET_TAG" dist/* --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
