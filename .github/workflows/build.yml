@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TARGET_TAG }}
+          ref: refs/tags/${{ env.TARGET_TAG }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -82,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TARGET_TAG }}
+          ref: refs/tags/${{ env.TARGET_TAG }}
 
       - uses: pnpm/action-setup@v4
         with:
