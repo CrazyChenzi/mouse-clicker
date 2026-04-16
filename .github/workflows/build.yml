@@ -75,43 +75,6 @@ jobs:
           path: dist/*.dmg
           retention-days: 7
 
-  # ── macOS x64 (Intel) ────────────────────────────────────────────────────────
-  build-mac-x64:
-    name: macOS x64
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TARGET_TAG }}
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Rebuild robotjs for Electron (x64)
-        run: pnpm exec electron-rebuild -f -w robotjs
-        env:
-          ELECTRON_RUN_AS_NODE: ''
-
-      - name: Build & package
-        run: pnpm exec electron-vite build && pnpm exec electron-builder --mac --x64 --publish never
-        env:
-          ELECTRON_RUN_AS_NODE: ''
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-mac-x64
-          path: dist/*.dmg
-          retention-days: 7
-
   # ── Windows x64 ──────────────────────────────────────────────────────────────
   build-win:
     name: Windows x64
@@ -155,17 +118,12 @@ jobs:
   # ── Upload artifacts to Release ───────────────────────────────────────────────
   upload-release:
     name: Upload to Release
-    needs: [build-mac-arm64, build-mac-x64, build-win]
+    needs: [build-mac-arm64, build-win]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: dist-mac-arm64
-          path: dist/
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-mac-x64
           path: dist/
 
       - uses: actions/download-artifact@v4
