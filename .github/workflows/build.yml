@@ -5,19 +5,14 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
-    inputs:
-      draft:
-        description: 'Create as draft release'
-        required: false
-        default: 'true'
-        type: boolean
 
 permissions:
   contents: write
 
 jobs:
-  build-mac:
-    name: Build macOS (arm64 + x64)
+  # ── macOS arm64 (Apple Silicon) ─────────────────────────────────────────────
+  build-mac-arm64:
+    name: macOS arm64
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,31 +29,60 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Rebuild native modules for Electron
-        run: pnpm rebuild
-
-      - name: Build & package (macOS)
-        run: pnpm build:mac
+      - name: Rebuild robotjs for Electron (arm64)
+        run: pnpm exec electron-rebuild -f -w robotjs
         env:
           ELECTRON_RUN_AS_NODE: ''
-          # Code signing (optional — set in repo secrets if you have an Apple Developer cert)
-          # CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
-          # CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+      - name: Build & package
+        run: pnpm exec electron-vite build && pnpm exec electron-builder --mac --arm64 --publish never
+        env:
+          ELECTRON_RUN_AS_NODE: ''
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: dist-mac
-          path: |
-            dist/*.dmg
-            dist/*.zip
+          name: dist-mac-arm64
+          path: dist/*.dmg
           retention-days: 7
 
+  # ── macOS x64 (Intel) ────────────────────────────────────────────────────────
+  build-mac-x64:
+    name: macOS x64
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Rebuild robotjs for Electron (x64)
+        run: pnpm exec electron-rebuild -f -w robotjs
+        env:
+          ELECTRON_RUN_AS_NODE: ''
+
+      - name: Build & package
+        run: pnpm exec electron-vite build && pnpm exec electron-builder --mac --x64 --publish never
+        env:
+          ELECTRON_RUN_AS_NODE: ''
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-mac-x64
+          path: dist/*.dmg
+          retention-days: 7
+
+  # ── Windows x64 ──────────────────────────────────────────────────────────────
   build-win:
-    name: Build Windows (x64)
+    name: Windows x64
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -75,16 +99,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Rebuild native modules for Electron
-        run: pnpm rebuild
-
-      - name: Build & package (Windows)
-        run: pnpm build:win
+      - name: Rebuild robotjs for Electron (Windows x64)
+        # Use electron-rebuild directly — avoids the pnpm.cjs fork issue on Windows
+        run: pnpm exec electron-rebuild -f -w robotjs
         env:
           ELECTRON_RUN_AS_NODE: ''
 
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+      - name: Build & package
+        # Override npm_execpath so electron-builder uses npm (not pnpm.cjs) if it attempts
+        # a secondary rebuild. --publish never avoids needing GH_TOKEN during build.
+        run: pnpm exec electron-vite build && pnpm exec electron-builder --win --x64 --publish never
+        env:
+          ELECTRON_RUN_AS_NODE: ''
+          npm_execpath: npm
+          # Disable electron-builder's own native-rebuild attempt since we just rebuilt above
+          ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: 'true'
+
+      - uses: actions/upload-artifact@v4
         with:
           name: dist-win
           path: |
@@ -92,33 +123,38 @@ jobs:
             dist/*.msi
           retention-days: 7
 
+  # ── GitHub Release (tags only) ───────────────────────────────────────────────
   release:
-    name: Create GitHub Release
-    needs: [build-mac, build-win]
+    name: Create Release
+    needs: [build-mac-arm64, build-mac-x64, build-win]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: dist-mac
-          path: dist/mac
+          name: dist-mac-arm64
+          path: dist/
 
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-mac-x64
+          path: dist/
+
+      - uses: actions/download-artifact@v4
         with:
           name: dist-win
-          path: dist/win
+          path: dist/
 
-      - name: Create Release
+      - name: List release artifacts
+        run: ls -lh dist/
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          draft: ${{ github.event.inputs.draft == 'true' || true }}
+          draft: true
           generate_release_notes: true
-          files: |
-            dist/mac/*.dmg
-            dist/mac/*.zip
-            dist/win/*.exe
-            dist/win/*.msi
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

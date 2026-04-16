@@ -16,15 +16,14 @@ asarUnpack:
   - resources/**
   - node_modules/robotjs/**
 
+# Native modules are rebuilt by electron-rebuild in CI before electron-builder runs.
+# Disable electron-builder's own rebuild to avoid the pnpm.cjs fork issue on Windows.
+npmRebuild: false
+
 mac:
   target:
     - target: dmg
-      arch:
-        - arm64
-        - x64
   category: public.app-category.utilities
-  entitlements: resources/entitlements.mac.plist
-  entitlementsInherit: resources/entitlements.mac.plist
   extendInfo:
     NSAppleEventsUsageDescription: This app requires access to control your mouse.
     NSAccessibilityUsageDescription: This app requires Accessibility access to control your mouse.
@@ -40,12 +39,8 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
-  installerIcon: resources/icon.ico
-  uninstallerIcon: resources/icon.ico
 
 linux:
   target:
     - AppImage
   category: Utility
-
-npmRebuild: true
