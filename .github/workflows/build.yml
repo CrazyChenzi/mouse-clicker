@@ -9,8 +9,8 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to attach artifacts to (e.g. v1.0.0)'
-        required: true
+        description: 'Tag to upload artifacts to (leave empty to only build without uploading)'
+        required: false   # optional: omit to just build without creating a release
         type: string
   workflow_call:
     inputs:
@@ -22,30 +22,21 @@ on:
 permissions:
   contents: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   # ── macOS arm64 (Apple Silicon) ─────────────────────────────────────────────
   build-mac-arm64:
     name: macOS arm64
     runs-on: macos-latest
     env:
-      # inputs is accessible in job-level env (NOT workflow-level env for workflow_call)
       TARGET_TAG: ${{ inputs.tag || github.ref_name || github.event.release.tag_name }}
     steps:
-      - uses: actions/checkout@v4
-        # No explicit ref: GitHub uses the event's default checkout
-        # push:tags       → checks out the pushed tag automatically
-        # release:created → checks out the release target commit
-        # workflow_call   → checks out the caller's branch (main w/ version bump)
-        # workflow_dispatch → checks out the default branch
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'pnpm'
@@ -63,7 +54,7 @@ jobs:
         env:
           ELECTRON_RUN_AS_NODE: ''
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-mac-arm64
           path: dist/*.dmg
@@ -76,13 +67,13 @@ jobs:
     env:
       TARGET_TAG: ${{ inputs.tag || github.ref_name || github.event.release.tag_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'pnpm'
@@ -101,7 +92,7 @@ jobs:
           ELECTRON_RUN_AS_NODE: ''
           npm_execpath: npm
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-win
           path: |
@@ -113,19 +104,24 @@ jobs:
   upload-release:
     name: Upload to Release
     needs: [build-mac-arm64, build-win]
+    # Skip when workflow_dispatch is used without a tag (build-only mode)
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'release' ||
+      github.event_name == 'workflow_call' ||
+      (github.event_name == 'workflow_dispatch' && inputs.tag != '')
     runs-on: ubuntu-latest
     env:
       TARGET_TAG: ${{ inputs.tag || github.ref_name || github.event.release.tag_name }}
     steps:
-      - uses: actions/checkout@v4
-        # Needed for gh CLI authentication and git ls-remote
+      - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist-mac-arm64
           path: dist/
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist-win
           path: dist/
@@ -134,8 +130,6 @@ jobs:
         run: ls -lh dist/
 
       - name: Verify tag exists on remote
-        # Ensures the release is always created FROM an existing tag,
-        # never the other way around (GitHub auto-creating a tag from a release).
         run: |
           if ! git ls-remote --tags origin "refs/tags/$TARGET_TAG" | grep -q .; then
             echo "::error::Tag $TARGET_TAG not found on remote. Push the tag before creating a release."
@@ -144,8 +138,6 @@ jobs:
           echo "✓ Tag $TARGET_TAG confirmed on remote."
 
       - name: Create draft release from tag (if not exists)
-        # --verify-tag: gh will error instead of auto-creating a missing tag
-        # If the release already exists (e.g. release:created trigger), skip silently
         run: |
           if ! gh release view "$TARGET_TAG" > /dev/null 2>&1; then
             gh release create "$TARGET_TAG" \
