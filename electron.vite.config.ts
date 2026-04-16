@@ -4,7 +4,10 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['robotjs'] })]
+    // robotjs: native module, must stay as require() + asarUnpack
+    // node-schedule: pure JS but cron-parser (its dep) isn't hoisted by pnpm,
+    //   so electron-builder misses it. Bundle both inline to avoid the issue.
+    plugins: [externalizeDepsPlugin({ exclude: ['robotjs', 'node-schedule'] })]
   },
   preload: {
     plugins: [externalizeDepsPlugin()]
