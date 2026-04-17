@@ -11,7 +11,7 @@ import * as path from 'path'
 import { executeTask, stopTask, getIsRunning } from './autoClicker'
 import { startRecording, stopRecording } from './recorder'
 import { scheduleTask, cancelSchedule, isScheduled } from './scheduler'
-import { checkForUpdates } from './updater'
+import { checkForUpdates, downloadUpdate } from './updater'
 import { fileToBase64 } from './imageMatcher'
 import { ClickTask, HotkeyConfig, ScheduleConfig, AppData } from '../renderer/src/types'
 
@@ -271,6 +271,29 @@ export function registerIpcHandlers(
 
   // App version
   ipcMain.handle('app:version', () => app.getVersion())
+
+  // ── Update download ─────────────────────────────────────────────────────────
+  ipcMain.handle('updater:download', async (_event, downloadUrl: string) => {
+    const win = getMainWindow()
+    const os = require('os') as typeof import('os')
+    const fileName = downloadUrl.split('/').pop() ?? 'MouseClicker-update'
+    const destPath = path.join(os.tmpdir(), fileName)
+    try {
+      await downloadUpdate(downloadUrl, destPath, (progress) => {
+        win?.webContents.send('updater:download-progress', Math.round(progress * 100))
+      })
+      return { ok: true, filePath: destPath }
+    } catch (e) {
+      return { ok: false, error: String(e) }
+    }
+  })
+
+  // Open downloaded file with OS default handler
+  ipcMain.handle('updater:open-file', async (_event, filePath: string) => {
+    const { shell } = require('electron')
+    const err = await shell.openPath(filePath)
+    return { ok: !err, error: err || undefined }
+  })
 
   // ── Image pick (open file dialog and return base64) ─────────────────────────
   ipcMain.handle('image:pick', async () => {

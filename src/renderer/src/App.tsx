@@ -41,6 +41,9 @@ declare global {
       checkForUpdates: () => Promise<{ ok: boolean; info: import('./types').ReleaseInfo | null; error?: string }>
       getVersion: () => Promise<string>
       pickImage: () => Promise<{ ok: boolean; base64?: string; name?: string; error?: string }>
+      downloadUpdate: (downloadUrl: string) => Promise<{ ok: boolean; filePath?: string; error?: string }>
+      onDownloadProgress: (cb: (percent: number) => void) => () => void
+      openFile: (filePath: string) => Promise<{ ok: boolean; error?: string }>
     }
   }
 }

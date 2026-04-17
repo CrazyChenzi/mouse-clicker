@@ -56,7 +56,8 @@ export type AppStatus = 'idle' | 'running' | 'scheduled' | string
 export interface ReleaseInfo {
   tag: string
   version: string
-  url: string
+  url: string         // GitHub release page
+  downloadUrl: string // direct asset download URL for current platform/arch
   publishedAt: string
   notes: string
 }

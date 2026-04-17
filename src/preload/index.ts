@@ -37,7 +37,17 @@ const clickerAPI = {
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
   // Image pick
   pickImage: (): Promise<{ ok: boolean; base64?: string; name?: string; error?: string }> =>
-    ipcRenderer.invoke('image:pick')
+    ipcRenderer.invoke('image:pick'),
+  // Update download
+  downloadUpdate: (downloadUrl: string): Promise<{ ok: boolean; filePath?: string; error?: string }> =>
+    ipcRenderer.invoke('updater:download', downloadUrl),
+  onDownloadProgress: (cb: (percent: number) => void): (() => void) => {
+    const handler = (_: unknown, percent: number): void => cb(percent)
+    ipcRenderer.on('updater:download-progress', handler)
+    return () => ipcRenderer.removeListener('updater:download-progress', handler)
+  },
+  openFile: (filePath: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('updater:open-file', filePath)
 }
 
 if (process.contextIsolated) {
