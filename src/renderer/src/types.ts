@@ -1,7 +1,14 @@
 export interface ClickAction {
   id: string
+  type?: 'coordinate' | 'image'  // default 'coordinate' (backwards-compatible)
+  // coordinate type
   x: number
   y: number
+  // image type
+  imageBase64?: string       // PNG/JPG as base64 data URL
+  imageName?: string         // display name (original filename)
+  confidence?: number        // match threshold 0–1, default 0.8
+  // common
   count: number
   delayBetweenClicks: number
   button: 'left' | 'right' | 'middle'

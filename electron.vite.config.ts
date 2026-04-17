@@ -5,9 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   main: {
     // robotjs: native module, must stay as require() + asarUnpack
-    // node-schedule: pure JS but cron-parser (its dep) isn't hoisted by pnpm,
-    //   so electron-builder misses it. Bundle both inline to avoid the issue.
-    plugins: [externalizeDepsPlugin({ exclude: ['robotjs', 'node-schedule'] })]
+    // node-schedule: pure JS but cron-parser (its dep) isn't hoisted by pnpm → bundle inline
+    // jimp: pure JS image processing, bundle inline to avoid pnpm hoisting issues
+    plugins: [externalizeDepsPlugin({ exclude: ['robotjs', 'node-schedule', 'jimp'] })]
   },
   preload: {
     plugins: [externalizeDepsPlugin()]

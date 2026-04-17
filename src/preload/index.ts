@@ -34,7 +34,10 @@ const clickerAPI = {
   checkForUpdates: (): Promise<{ ok: boolean; info: ReleaseInfo | null; error?: string }> =>
     ipcRenderer.invoke('updater:check'),
   // App version
-  getVersion: (): Promise<string> => ipcRenderer.invoke('app:version')
+  getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
+  // Image pick
+  pickImage: (): Promise<{ ok: boolean; base64?: string; name?: string; error?: string }> =>
+    ipcRenderer.invoke('image:pick')
 }
 
 if (process.contextIsolated) {

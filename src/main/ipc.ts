@@ -12,6 +12,7 @@ import { executeTask, stopTask, getIsRunning } from './autoClicker'
 import { startRecording, stopRecording } from './recorder'
 import { scheduleTask, cancelSchedule, isScheduled } from './scheduler'
 import { checkForUpdates } from './updater'
+import { fileToBase64 } from './imageMatcher'
 import { ClickTask, HotkeyConfig, ScheduleConfig, AppData } from '../renderer/src/types'
 
 const PROFILES_FILE = path.join(app.getPath('userData'), 'profiles.json')
@@ -270,4 +271,23 @@ export function registerIpcHandlers(
 
   // App version
   ipcMain.handle('app:version', () => app.getVersion())
+
+  // ── Image pick (open file dialog and return base64) ─────────────────────────
+  ipcMain.handle('image:pick', async () => {
+    const { dialog } = require('electron')
+    const result = await dialog.showOpenDialog(getMainWindow()!, {
+      title: '选择参考图片',
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'bmp'] }],
+      properties: ['openFile']
+    })
+    if (result.canceled || result.filePaths.length === 0) return { ok: false }
+    const filePath = result.filePaths[0]
+    const name = filePath.split(/[/\\]/).pop() ?? 'image'
+    try {
+      const base64 = fileToBase64(filePath)
+      return { ok: true, base64, name }
+    } catch (e) {
+      return { ok: false, error: String(e) }
+    }
+  })
 }

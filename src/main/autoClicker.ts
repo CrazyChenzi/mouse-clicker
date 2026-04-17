@@ -1,4 +1,5 @@
 import { ClickTask } from '../renderer/src/types'
+import { findImageOnScreen } from './imageMatcher'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const robot = require('robotjs')
@@ -31,30 +32,39 @@ export async function executeTask(
         const action = actions[i]
 
         try {
-          robot.moveMouse(action.x, action.y)
+          let clickX = action.x
+          let clickY = action.y
+
+          // ── Image-type action: find template on screen first ────────────────
+          if (action.type === 'image' && action.imageBase64) {
+            const result = await findImageOnScreen(
+              action.imageBase64,
+              action.confidence ?? 0.8
+            )
+            if (!result) {
+              console.warn(`[autoClicker] Image not found on screen (action ${i}), skipping`)
+              continue
+            }
+            clickX = result.x
+            clickY = result.y
+          }
+
+          robot.moveMouse(clickX, clickY)
           await sleep(50)
 
           for (let c = 0; c < action.count; c++) {
             if (shouldStop) break
             robot.mouseClick(action.button, false)
-            if (c < action.count - 1) {
-              await sleep(action.delayBetweenClicks)
-            }
+            if (c < action.count - 1) await sleep(action.delayBetweenClicks)
           }
         } catch (robotErr) {
-          console.error('[autoClicker] robotjs error:', robotErr)
-          // Stop the task if robotjs fails (e.g. accessibility permission revoked)
+          console.error('[autoClicker] error:', robotErr)
           shouldStop = true
           break
         }
 
-        if (onProgress) {
-          onProgress({ action: i, repeat: runCount })
-        }
-
-        if (i < actions.length - 1 && !shouldStop) {
-          await sleep(delayBetweenActions)
-        }
+        if (onProgress) onProgress({ action: i, repeat: runCount })
+        if (i < actions.length - 1 && !shouldStop) await sleep(delayBetweenActions)
       }
 
       if (runCount < maxRepeats && !shouldStop && actions.length > 0) {

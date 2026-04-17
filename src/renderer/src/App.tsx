@@ -40,6 +40,7 @@ declare global {
       showWindow: () => Promise<{ ok: boolean }>
       checkForUpdates: () => Promise<{ ok: boolean; info: import('./types').ReleaseInfo | null; error?: string }>
       getVersion: () => Promise<string>
+      pickImage: () => Promise<{ ok: boolean; base64?: string; name?: string; error?: string }>
     }
   }
 }

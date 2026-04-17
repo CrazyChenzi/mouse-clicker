@@ -252,12 +252,27 @@ function ActionRow({
   onEdit: () => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
 }): React.JSX.Element {
   const label = action.button === 'left' ? '左键' : action.button === 'right' ? '右键' : '中键'
+  const isImage = action.type === 'image'
   return (
     <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-lg px-3 py-2.5 hover:border-slate-300 transition-colors">
       <span className="w-6 h-6 flex items-center justify-center bg-blue-100 text-blue-600 text-xs font-bold rounded">{index + 1}</span>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-3 text-sm">
-          <span className="font-mono text-slate-700">({action.x}, {action.y})</span>
+        <div className="flex items-center gap-2 text-sm">
+          {isImage ? (
+            <>
+              {action.imageBase64 && (
+                <img src={action.imageBase64} alt="" className="h-6 w-auto rounded border border-slate-200 object-contain" />
+              )}
+              <span className="text-xs bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-medium shrink-0">图片识别</span>
+              <span className="text-slate-500 text-xs truncate max-w-32">{action.imageName ?? ''}</span>
+              <span className="text-slate-400">·</span>
+              <span className="text-slate-500 text-xs">置信度 {Math.round((action.confidence ?? 0.8) * 100)}%</span>
+            </>
+          ) : (
+            <>
+              <span className="font-mono text-slate-700">({action.x}, {action.y})</span>
+            </>
+          )}
           <span className="text-slate-400">·</span>
           <span className="text-slate-600">{label} × {action.count}</span>
           <span className="text-slate-400">·</span>
