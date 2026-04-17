@@ -31,6 +31,12 @@ jobs:
       TARGET_TAG: ${{ inputs.tag || github.ref_name || github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          # For workflow_call (from release.yml), the default checkout uses the SHA at
+          # the time release.yml started — BEFORE the version-bump commit was pushed.
+          # Specifying the tag ref ensures we always get the correct package.json version
+          # so that built artifact filenames match the release tag.
+          ref: refs/tags/${{ env.TARGET_TAG }}
 
       - uses: pnpm/action-setup@v5
         with:
@@ -74,6 +80,8 @@ jobs:
       TARGET_TAG: ${{ inputs.tag || github.ref_name || github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ env.TARGET_TAG }}
 
       - uses: pnpm/action-setup@v5
         with:
