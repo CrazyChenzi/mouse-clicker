@@ -145,15 +145,14 @@ jobs:
           fi
           echo "✓ Tag $TARGET_TAG confirmed on remote."
 
-      - name: Create draft release from tag (if not exists)
+      - name: Create release from tag (if not exists)
         run: |
           if ! gh release view "$TARGET_TAG" > /dev/null 2>&1; then
             gh release create "$TARGET_TAG" \
               --title "$TARGET_TAG" \
               --generate-notes \
-              --draft \
               --verify-tag
-            echo "✓ Draft release $TARGET_TAG created."
+            echo "✓ Release $TARGET_TAG created."
           else
             echo "Release $TARGET_TAG already exists, uploading artifacts."
           fi

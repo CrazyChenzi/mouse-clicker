@@ -35,8 +35,21 @@ export function checkForUpdates(): Promise<ReleaseInfo | null> {
       res.on('data', (chunk) => { body += chunk })
       res.on('end', () => {
         try {
+          // 404 means no published release exists (all may be drafts)
+          if (res.statusCode === 404) {
+            reject(new Error('GitHub 上暂无已发布的版本，请先在 GitHub Releases 页面将 Draft Release 发布'))
+            return
+          }
+          if (res.statusCode !== 200) {
+            reject(new Error(`GitHub API 返回错误 (HTTP ${res.statusCode})，请稍后重试`))
+            return
+          }
           const release = JSON.parse(body)
           const tag: string = release.tag_name ?? ''
+          if (!tag) {
+            resolve(null)
+            return
+          }
           const latestVer = tag.replace(/^v/, '')
           const currentVer = app.getVersion()
           if (isNewer(latestVer, currentVer)) {
