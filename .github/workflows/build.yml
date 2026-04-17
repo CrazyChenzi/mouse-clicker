@@ -10,7 +10,7 @@ on:
     inputs:
       tag:
         description: 'Tag to upload artifacts to (leave empty to only build without uploading)'
-        required: false   # optional: omit to just build without creating a release
+        required: false
         type: string
   workflow_call:
     inputs:
@@ -40,6 +40,12 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+
+      - name: Use HTTPS instead of SSH for GitHub git URLs
+        # Some transitive deps (e.g. @electron/node-gyp) are referenced via
+        # git@github.com SSH URLs in the lockfile. CI runners have no SSH key,
+        # so rewrite all git@github.com: URLs to https://github.com/.
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
 
       - name: Install dependencies
         run: pnpm install
@@ -78,6 +84,9 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
 
+      - name: Use HTTPS instead of SSH for GitHub git URLs
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
       - name: Install dependencies
         run: pnpm install
 
@@ -104,7 +113,6 @@ jobs:
   upload-release:
     name: Upload to Release
     needs: [build-mac-arm64, build-win]
-    # Skip when workflow_dispatch is used without a tag (build-only mode)
     if: >
       github.event_name == 'push' ||
       github.event_name == 'release' ||
