@@ -264,7 +264,11 @@ function ActionRow({
                 <img src={action.imageBase64} alt="" className="h-6 w-auto rounded border border-slate-200 object-contain" />
               )}
               <span className="text-xs bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-medium shrink-0">图片识别</span>
-              <span className="text-slate-500 text-xs truncate max-w-32">{action.imageName ?? ''}</span>
+              {action.captureX !== undefined ? (
+                <span className="text-slate-500 text-xs font-mono">({action.captureX}, {action.captureY})</span>
+              ) : (
+                <span className="text-slate-500 text-xs truncate max-w-32">{action.imageName ?? ''}</span>
+              )}
               <span className="text-slate-400">·</span>
               <span className="text-slate-500 text-xs">置信度 {Math.round((action.confidence ?? 0.8) * 100)}%</span>
             </>

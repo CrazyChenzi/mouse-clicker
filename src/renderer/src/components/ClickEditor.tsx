@@ -43,7 +43,6 @@ export default function ClickEditor({ action: initial, hideOnPick, onSave, onCan
 
   const handleCaptureRegion = async (): Promise<void> => {
     setImageLoading(true)
-    // Hide the editor modal so it doesn't appear in the screenshot
     if (hideOnPick) await window.clickerAPI.hideWindow()
     try {
       const res = await window.clickerAPI.captureRegion()
@@ -53,7 +52,9 @@ export default function ClickEditor({ action: initial, hideOnPick, onSave, onCan
           type: 'image',
           imageBase64: res.base64,
           imageName: `capture-${res.centerX},${res.centerY}.png`,
-          // Store center coords as reference (not used for matching but shown to user)
+          captureX: res.centerX,
+          captureY: res.centerY,
+          // Store center as fallback x/y (used if image match fails)
           x: res.centerX ?? a.x,
           y: res.centerY ?? a.y
         }))
@@ -141,13 +142,32 @@ export default function ClickEditor({ action: initial, hideOnPick, onSave, onCan
                 <label className="block text-sm text-slate-600 mb-1.5">参考图片</label>
                 <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
                   {action.imageBase64 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
+                      {/* Image preview */}
                       <img
                         src={action.imageBase64}
                         alt="template"
-                        className="max-h-24 max-w-full mx-auto rounded shadow-sm object-contain"
+                        className="max-h-28 max-w-full mx-auto rounded shadow-sm object-contain border border-slate-200"
                       />
-                      <p className="text-xs text-slate-500 truncate">{action.imageName}</p>
+
+                      {/* Coordinate info — shown when image was captured from screen */}
+                      {(action.captureX !== undefined || action.x !== 0) && (
+                        <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-4 text-xs">
+                          <div className="flex items-center gap-1.5 text-slate-500">
+                            <svg className="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            截取位置
+                          </div>
+                          <span className="font-mono text-slate-700 font-medium">
+                            ({action.captureX ?? action.x}, {action.captureY ?? action.y})
+                          </span>
+                          <span className="text-slate-400 ml-auto truncate max-w-24">{action.imageName}</span>
+                        </div>
+                      )}
+
+                      {/* Re-capture / re-import links */}
                       <div className="flex items-center justify-center gap-3">
                         <button type="button" onClick={handlePickImage} disabled={imageLoading}
                           className="text-xs text-blue-500 hover:text-blue-700">

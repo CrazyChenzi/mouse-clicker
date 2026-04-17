@@ -8,6 +8,8 @@ export interface ClickAction {
   imageBase64?: string       // PNG/JPG as base64 data URL
   imageName?: string         // display name (original filename)
   confidence?: number        // match threshold 0–1, default 0.8
+  captureX?: number          // screen X where template was captured (center)
+  captureY?: number          // screen Y where template was captured (center)
   // common
   count: number
   delayBetweenClicks: number

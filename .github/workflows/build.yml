@@ -132,6 +132,22 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Delete stale draft releases (keep only published + current)
+        # Draft releases from failed/abandoned CI runs appear ABOVE published
+        # releases in the GitHub UI (for repo owners), pushing the real "Latest"
+        # release down the page. Clean them up before publishing the new one.
+        run: |
+          gh release list --json tagName,isDraft \
+            --jq '.[] | select(.isDraft == true) | .tagName' \
+            | while read -r tag; do
+                if [ "$tag" != "$TARGET_TAG" ]; then
+                  echo "Deleting stale draft: $tag"
+                  gh release delete "$tag" --yes 2>/dev/null || true
+                fi
+              done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: actions/download-artifact@v8
         with:
           name: dist-mac-arm64
