@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { ClickTask, ScheduleConfig, HotkeyConfig, AppStatus, AppData } from './types'
+import { ClickTask, ScheduleConfig, HotkeyConfig, AppStatus, AppData, AppSettings } from './types'
 import ClickList from './components/ClickList'
 import Recorder from './components/Recorder'
 import Scheduler from './components/Scheduler'
@@ -10,17 +10,12 @@ import Controls from './components/Controls'
 type Tab = 'clicks' | 'recorder' | 'schedule' | 'settings'
 
 function makeDefaultProfile(name = '任务 1'): ClickTask {
-  return {
-    id: uuidv4(),
-    name,
-    actions: [],
-    repeatCount: 1,
-    delayBetweenActions: 500
-  }
+  return { id: uuidv4(), name, actions: [], repeatCount: 1, delayBetweenActions: 500 }
 }
 
 const DEFAULT_SCHEDULE: ScheduleConfig = { enabled: false, startAt: null, taskIds: [] }
 const DEFAULT_HOTKEY: HotkeyConfig = { startStop: 'F8' }
+const DEFAULT_SETTINGS: AppSettings = { hideWindowOnPick: true }
 
 declare global {
   interface Window {
@@ -44,6 +39,7 @@ declare global {
       hideWindow: () => Promise<{ ok: boolean }>
       showWindow: () => Promise<{ ok: boolean }>
       checkForUpdates: () => Promise<{ ok: boolean; info: import('./types').ReleaseInfo | null; error?: string }>
+      getVersion: () => Promise<string>
     }
   }
 }
@@ -54,12 +50,12 @@ export default function App(): React.JSX.Element {
   const [activeProfileId, setActiveProfileId] = useState<string>('')
   const [schedule, setSchedule] = useState<ScheduleConfig>(DEFAULT_SCHEDULE)
   const [hotkey, setHotkey] = useState<HotkeyConfig>(DEFAULT_HOTKEY)
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   const [status, setStatus] = useState<AppStatus>('idle')
   const [saveIndicator, setSaveIndicator] = useState(false)
   const [windowHidden, setWindowHidden] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Derived: active task profile
   const activeProfile = profiles.find(p => p.id === activeProfileId) ?? profiles[0]
 
   // ── Load saved data on startup ─────────────────────────────────────────────
@@ -68,6 +64,7 @@ export default function App(): React.JSX.Element {
       if (res.ok && res.data && res.data.profiles.length > 0) {
         setProfiles(res.data.profiles)
         setActiveProfileId(res.data.activeProfileId)
+        if (res.data.settings) setSettings(res.data.settings)
       } else {
         const p = makeDefaultProfile()
         setProfiles([p])
@@ -79,19 +76,17 @@ export default function App(): React.JSX.Element {
     return unsub
   }, [])
 
-  // ── Sync active profile to main process so F8 hotkey always has the right task ──
+  // ── Sync active profile to main process for F8 hotkey ──────────────────────
   useEffect(() => {
-    if (activeProfile) {
-      window.clickerAPI.setActiveTask(activeProfile)
-    }
+    if (activeProfile) window.clickerAPI.setActiveTask(activeProfile)
   }, [activeProfile])
 
-  // ── Auto-save with debounce whenever profiles change ──────────────────────
+  // ── Auto-save (debounced) whenever profiles or settings change ─────────────
   useEffect(() => {
     if (!activeProfileId) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      const data: AppData = { profiles, activeProfileId }
+      const data: AppData = { profiles, activeProfileId, settings }
       window.clickerAPI.saveProfiles(data).then((res) => {
         if (res.ok) {
           setSaveIndicator(true)
@@ -99,10 +94,8 @@ export default function App(): React.JSX.Element {
         }
       })
     }, 800)
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-    }
-  }, [profiles, activeProfileId])
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
+  }, [profiles, activeProfileId, settings])
 
   // ── Profile management ────────────────────────────────────────────────────
   const updateActiveProfile = useCallback((updated: ClickTask) => {
@@ -148,9 +141,7 @@ export default function App(): React.JSX.Element {
       const targets = cfg.taskIds
         .map(id => profiles.find(p => p.id === id))
         .filter((p): p is ClickTask => p !== undefined)
-      if (targets.length > 0) {
-        await window.clickerAPI.setSchedule(cfg, targets)
-      }
+      if (targets.length > 0) await window.clickerAPI.setSchedule(cfg, targets)
     } else {
       await window.clickerAPI.cancelSchedule()
     }
@@ -244,6 +235,7 @@ export default function App(): React.JSX.Element {
             onProfileUpdate={updateActiveProfile}
             onProfileCreate={createProfile}
             onProfileDelete={deleteProfile}
+            hideOnPick={settings.hideWindowOnPick}
             status={status}
           />
         )}
@@ -251,17 +243,14 @@ export default function App(): React.JSX.Element {
           <Recorder onAddActions={addRecordedActions} />
         )}
         {tab === 'schedule' && (
-          <Scheduler
-            config={schedule}
-            profiles={profiles}
-            onSave={handleScheduleSave}
-            status={status}
-          />
+          <Scheduler config={schedule} profiles={profiles} onSave={handleScheduleSave} status={status} />
         )}
         {tab === 'settings' && (
           <Settings
             hotkey={hotkey}
             onSaveHotkey={handleHotkeySave}
+            settings={settings}
+            onSettingsChange={setSettings}
           />
         )}
       </div>

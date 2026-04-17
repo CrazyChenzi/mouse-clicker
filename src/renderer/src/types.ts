@@ -34,9 +34,14 @@ export interface HotkeyConfig {
   startStop: string
 }
 
+export interface AppSettings {
+  hideWindowOnPick: boolean  // whether to auto-hide window during coordinate pick
+}
+
 export interface AppData {
   profiles: ClickTask[]
   activeProfileId: string
+  settings?: AppSettings
 }
 
 export type AppStatus = 'idle' | 'running' | 'scheduled' | string

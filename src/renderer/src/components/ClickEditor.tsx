@@ -4,25 +4,23 @@ import { ClickAction } from '../types'
 
 interface Props {
   action: ClickAction
+  hideOnPick: boolean
   onSave: (action: ClickAction) => void
   onCancel: () => void
 }
 
-export default function ClickEditor({ action: initial, onSave, onCancel }: Props): React.JSX.Element {
+export default function ClickEditor({ action: initial, hideOnPick, onSave, onCancel }: Props): React.JSX.Element {
   const [action, setAction] = useState<ClickAction>({ ...initial })
   const [picking, setPicking] = useState(false)
 
   const handlePickCoordinate = async (): Promise<void> => {
     setPicking(true)
-    // Hide main window so it doesn't block the screen during coordinate pick
-    await window.clickerAPI.hideWindow()
+    if (hideOnPick) await window.clickerAPI.hideWindow()
     try {
       const coords = await window.clickerAPI.pickCoordinate()
-      if (coords) {
-        setAction((a) => ({ ...a, x: coords.x, y: coords.y }))
-      }
+      if (coords) setAction((a) => ({ ...a, x: coords.x, y: coords.y }))
     } finally {
-      await window.clickerAPI.showWindow()
+      if (hideOnPick) await window.clickerAPI.showWindow()
       setPicking(false)
     }
   }

@@ -1,24 +1,30 @@
-import React, { useState } from 'react'
-import { HotkeyConfig, ReleaseInfo } from '../types'
+import React, { useState, useEffect } from 'react'
+import { HotkeyConfig, ReleaseInfo, AppSettings } from '../types'
 
 interface Props {
   hotkey: HotkeyConfig
   onSaveHotkey: (config: HotkeyConfig) => void
+  settings: AppSettings
+  onSettingsChange: (s: AppSettings) => void
 }
 
 const PRESET_KEYS = ['F6', 'F7', 'F8', 'F9', 'F10', 'F12']
 
-export default function Settings({ hotkey, onSaveHotkey }: Props): React.JSX.Element {
+export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsChange }: Props): React.JSX.Element {
   const [key, setKey] = useState(hotkey.startStop)
   const [customKey, setCustomKey] = useState('')
   const [hotkeyMode, setHotkeyMode] = useState<'preset' | 'custom'>(
     PRESET_KEYS.includes(hotkey.startStop) ? 'preset' : 'custom'
   )
   const [hotkeySaved, setHotkeySaved] = useState(false)
-
+  const [version, setVersion] = useState('')
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'latest' | 'available' | 'error'>('idle')
   const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null)
   const [updateError, setUpdateError] = useState('')
+
+  useEffect(() => {
+    window.clickerAPI.getVersion().then(setVersion)
+  }, [])
 
   const handleSaveHotkey = async (): Promise<void> => {
     const k = hotkeyMode === 'preset' ? key : customKey
@@ -44,100 +50,83 @@ export default function Settings({ hotkey, onSaveHotkey }: Props): React.JSX.Ele
     }
   }
 
-  const openReleasePage = (): void => {
-    if (releaseInfo?.url) {
-      // open in default browser via Electron shell
-      window.open(releaseInfo.url)
-    }
-  }
-
   return (
     <div className="flex flex-col h-full p-4 gap-4 overflow-y-auto">
-      {/* Hotkey settings */}
+      {/* Hotkey */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">全局快捷键</h3>
-        <p className="text-xs text-slate-500 mb-4">
-          设置一个全局快捷键，在任意应用中按下即可启动/停止点击任务。
-        </p>
+        <p className="text-xs text-slate-500 mb-4">在任意应用中按下即可启动/停止点击任务。</p>
 
         <div className="space-y-3">
           <div className="flex gap-2">
-            <button
-              onClick={() => setHotkeyMode('preset')}
-              className={`flex-1 py-1.5 text-sm rounded-lg border transition-colors ${
-                hotkeyMode === 'preset' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 text-slate-600'
-              }`}
-            >
-              预设按键
-            </button>
-            <button
-              onClick={() => setHotkeyMode('custom')}
-              className={`flex-1 py-1.5 text-sm rounded-lg border transition-colors ${
-                hotkeyMode === 'custom' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 text-slate-600'
-              }`}
-            >
-              自定义
-            </button>
+            {(['preset', 'custom'] as const).map(m => (
+              <button key={m} onClick={() => setHotkeyMode(m)}
+                className={`flex-1 py-1.5 text-sm rounded-lg border transition-colors ${hotkeyMode === m ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 text-slate-600'}`}>
+                {m === 'preset' ? '预设按键' : '自定义'}
+              </button>
+            ))}
           </div>
 
           {hotkeyMode === 'preset' ? (
             <div className="grid grid-cols-3 gap-2">
-              {PRESET_KEYS.map((k) => (
-                <button
-                  key={k}
-                  onClick={() => setKey(k)}
-                  className={`py-2 text-sm font-mono rounded-lg border transition-colors ${
-                    key === k ? 'border-blue-500 bg-blue-50 text-blue-600 font-semibold' : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
+              {PRESET_KEYS.map(k => (
+                <button key={k} onClick={() => setKey(k)}
+                  className={`py-2 text-sm font-mono rounded-lg border transition-colors ${key === k ? 'border-blue-500 bg-blue-50 text-blue-600 font-semibold' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
                   {k}
                 </button>
               ))}
             </div>
           ) : (
             <div>
-              <input
-                type="text"
-                value={customKey}
-                onChange={e => setCustomKey(e.target.value)}
+              <input type="text" value={customKey} onChange={e => setCustomKey(e.target.value)}
                 placeholder="例如: CommandOrControl+Shift+S"
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                支持修饰键: CommandOrControl, Alt, Shift，组合示例: Alt+F8
-              </p>
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              <p className="text-xs text-slate-400 mt-1">支持修饰键: CommandOrControl, Alt, Shift</p>
             </div>
           )}
 
           <div className="flex items-center gap-3">
             <div className="flex-1 text-sm text-slate-600">
               当前快捷键：
-              <span className="font-mono font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded ml-1">
-                {hotkey.startStop}
-              </span>
+              <span className="font-mono font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded ml-1">{hotkey.startStop}</span>
             </div>
-            <button
-              onClick={handleSaveHotkey}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
-            >
+            <button onClick={handleSaveHotkey}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors">
               {hotkeySaved ? '已应用 ✓' : '应用'}
             </button>
           </div>
         </div>
       </div>
 
+      {/* Coordinate pick settings */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-slate-700 mb-4">坐标选取</h3>
+        <label className="flex items-center justify-between cursor-pointer">
+          <div>
+            <p className="text-sm text-slate-700">选取时自动隐藏主窗口</p>
+            <p className="text-xs text-slate-400 mt-0.5">点击「屏幕选取」时先隐藏本窗口，选取完成后自动恢复</p>
+          </div>
+          <div className="relative ml-4 shrink-0">
+            <input type="checkbox" className="sr-only peer"
+              checked={settings.hideWindowOnPick}
+              onChange={e => onSettingsChange({ ...settings, hideWindowOnPick: e.target.checked })} />
+            <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-blue-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" />
+          </div>
+        </label>
+      </div>
+
       {/* Check for updates */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-slate-700 mb-2">检查更新</h3>
-        <p className="text-xs text-slate-500 mb-4">
-          当前版本：<span className="font-mono font-medium text-slate-700">{/* version injected at build time */}</span>
-        </p>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-slate-700">检查更新</h3>
+          {version && (
+            <span className="text-xs text-slate-400 font-mono">v{version}</span>
+          )}
+        </div>
 
         {updateState === 'idle' && (
-          <button
-            onClick={handleCheckUpdate}
-            className="w-full py-2.5 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
-          >
+          <button onClick={handleCheckUpdate}
+            className="w-full py-2.5 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors">
             检查更新
           </button>
         )}
@@ -168,23 +157,13 @@ export default function Settings({ hotkey, onSaveHotkey }: Props): React.JSX.Ele
               <span>发现新版本 <strong>{releaseInfo.tag}</strong></span>
             </div>
             {releaseInfo.notes && (
-              <p className="text-xs text-slate-500 bg-slate-50 rounded p-2 line-clamp-3">
-                {releaseInfo.notes}
-              </p>
+              <p className="text-xs text-slate-500 bg-slate-50 rounded p-2 line-clamp-3">{releaseInfo.notes}</p>
             )}
             <div className="flex gap-2">
-              <button
-                onClick={() => setUpdateState('idle')}
-                className="flex-1 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                稍后
-              </button>
-              <button
-                onClick={openReleasePage}
-                className="flex-1 py-2 text-sm text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors font-medium"
-              >
-                前往下载
-              </button>
+              <button onClick={() => setUpdateState('idle')}
+                className="flex-1 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">稍后</button>
+              <button onClick={() => releaseInfo.url && window.open(releaseInfo.url)}
+                className="flex-1 py-2 text-sm text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors font-medium">前往下载</button>
             </div>
           </div>
         )}
@@ -214,16 +193,10 @@ export default function Settings({ hotkey, onSaveHotkey }: Props): React.JSX.Ele
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-3">关于</h3>
         <div className="space-y-1 text-xs text-slate-500">
-          <p>Mouse Clicker</p>
+          <p>Mouse Clicker{version ? ` v${version}` : ''}</p>
           <p>一款跨平台鼠标自动点击工具</p>
-          <a
-            href="https://github.com/CrazyChenzi/mouse-clicker"
-            target="_blank"
-            rel="noreferrer"
-            className="text-blue-500 hover:underline"
-          >
-            GitHub
-          </a>
+          <a href="https://github.com/CrazyChenzi/mouse-clicker" target="_blank" rel="noreferrer"
+            className="text-blue-500 hover:underline">GitHub</a>
         </div>
       </div>
     </div>

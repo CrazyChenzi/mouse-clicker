@@ -10,6 +10,7 @@ interface Props {
   onProfileUpdate: (task: ClickTask) => void
   onProfileCreate: () => void
   onProfileDelete: (id: string) => void
+  hideOnPick: boolean
   status: AppStatus
 }
 
@@ -20,6 +21,7 @@ export default function ClickList({
   onProfileUpdate,
   onProfileCreate,
   onProfileDelete,
+  hideOnPick,
   status
 }: Props): React.JSX.Element {
   const [editingAction, setEditingAction] = useState<ClickAction | null>(null)
@@ -234,6 +236,7 @@ export default function ClickList({
       {showEditor && editingAction && (
         <ClickEditor
           action={editingAction}
+          hideOnPick={hideOnPick}
           onSave={handleSave}
           onCancel={() => setShowEditor(false)}
         />

@@ -166,7 +166,6 @@ export function registerIpcHandlers(
       })
 
       pickerWindow.setIgnoreMouseEvents(false)
-      // Use highest level to cover menu bar
       pickerWindow.setAlwaysOnTop(true, 'screen-saver')
       pickerWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
@@ -175,6 +174,12 @@ export function registerIpcHandlers(
       } else {
         pickerWindow.loadFile(join(__dirname, '../renderer/picker.html'))
       }
+
+      // Focus the picker window so it can capture keyboard events (e.g. ESC)
+      pickerWindow.once('ready-to-show', () => {
+        pickerWindow?.show()
+        pickerWindow?.focus()
+      })
 
       const cleanup = (): void => {
         if (pickerWindow && !pickerWindow.isDestroyed()) {
@@ -262,4 +267,7 @@ export function registerIpcHandlers(
       return { ok: false, error: String(e), info: null }
     }
   })
+
+  // App version
+  ipcMain.handle('app:version', () => app.getVersion())
 }

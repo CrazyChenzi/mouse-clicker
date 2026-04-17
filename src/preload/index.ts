@@ -32,7 +32,9 @@ const clickerAPI = {
   showWindow: () => ipcRenderer.invoke('window:show'),
   // Update checker
   checkForUpdates: (): Promise<{ ok: boolean; info: ReleaseInfo | null; error?: string }> =>
-    ipcRenderer.invoke('updater:check')
+    ipcRenderer.invoke('updater:check'),
+  // App version
+  getVersion: (): Promise<string> => ipcRenderer.invoke('app:version')
 }
 
 if (process.contextIsolated) {
