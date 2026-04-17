@@ -6,6 +6,7 @@
   "author": "crazychenzi",
   "license": "MIT",
   "scripts": {
+    "gen-icon": "node scripts/generate-icon.mjs && electron-icon-builder --input=resources/icon.png --output=resources",
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
@@ -47,6 +48,7 @@
     "autoprefixer": "^10.4.19",
     "electron": "^31.0.2",
     "electron-builder": "^24.13.3",
+    "electron-icon-builder": "^2.0.1",
     "electron-vite": "^2.3.0",
     "eslint": "^8.57.0",
     "postcss": "^8.4.39",

@@ -1,18 +1,33 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { HotkeyConfig, ReleaseInfo, AppSettings } from '../types'
+
+type UpdateState = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'downloaded' | 'error'
 
 interface Props {
   hotkey: HotkeyConfig
   onSaveHotkey: (config: HotkeyConfig) => void
   settings: AppSettings
   onSettingsChange: (s: AppSettings) => void
+  // Update state — lifted to App so it persists across tab switches
+  updateState: UpdateState
+  releaseInfo: ReleaseInfo | null
+  updateError: string
+  downloadPercent: number
+  downloadedPath: string
+  onCheckUpdate: () => void
+  onDownloadUpdate: () => void
+  onOpenUpdate: () => void
+  onUpdateStateChange: (s: UpdateState) => void
 }
 
 const PRESET_KEYS = ['F6', 'F7', 'F8', 'F9', 'F10', 'F12']
 
-type UpdateState = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'downloaded' | 'error'
-
-export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsChange }: Props): React.JSX.Element {
+export default function Settings({
+  hotkey, onSaveHotkey,
+  settings, onSettingsChange,
+  updateState, releaseInfo, updateError, downloadPercent,
+  onCheckUpdate, onDownloadUpdate, onOpenUpdate, onUpdateStateChange
+}: Props): React.JSX.Element {
   const [key, setKey] = useState(hotkey.startStop)
   const [customKey, setCustomKey] = useState('')
   const [hotkeyMode, setHotkeyMode] = useState<'preset' | 'custom'>(
@@ -20,19 +35,8 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
   )
   const [hotkeySaved, setHotkeySaved] = useState(false)
   const [version, setVersion] = useState('')
-  const [updateState, setUpdateState] = useState<UpdateState>('idle')
-  const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null)
-  const [updateError, setUpdateError] = useState('')
-  const [downloadPercent, setDownloadPercent] = useState(0)
-  const [downloadedPath, setDownloadedPath] = useState('')
-  const unsubProgress = useRef<(() => void) | null>(null)
 
-  useEffect(() => {
-    window.clickerAPI.getVersion().then(setVersion)
-  }, [])
-
-  // Clean up progress listener on unmount
-  useEffect(() => () => { unsubProgress.current?.() }, [])
+  useEffect(() => { window.clickerAPI.getVersion().then(setVersion) }, [])
 
   const handleSaveHotkey = async (): Promise<void> => {
     const k = hotkeyMode === 'preset' ? key : customKey
@@ -42,61 +46,12 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
     setTimeout(() => setHotkeySaved(false), 2000)
   }
 
-  const handleCheckUpdate = async (): Promise<void> => {
-    setUpdateState('checking')
-    setReleaseInfo(null)
-    setUpdateError('')
-    const res = await window.clickerAPI.checkForUpdates()
-    if (!res.ok) {
-      setUpdateState('error')
-      setUpdateError(res.error ?? '检查失败，请稍后重试')
-    } else if (res.info) {
-      setUpdateState('available')
-      setReleaseInfo(res.info)
-    } else {
-      setUpdateState('latest')
-    }
-  }
-
-  const handleDownload = async (): Promise<void> => {
-    if (!releaseInfo?.downloadUrl) {
-      window.open(releaseInfo?.url)
-      return
-    }
-    setUpdateState('downloading')
-    // Don't reset to 0 — the main process will emit the resume progress
-    // immediately, so the bar will jump to the right position
-
-    // Subscribe to progress events before calling download
-    unsubProgress.current?.()
-    unsubProgress.current = window.clickerAPI.onDownloadProgress((pct) => {
-      setDownloadPercent(pct)
-    })
-
-    const res = await window.clickerAPI.downloadUpdate(releaseInfo.downloadUrl)
-    unsubProgress.current?.()
-    unsubProgress.current = null
-
-    if (res.ok && res.filePath) {
-      setDownloadedPath(res.filePath)
-      setUpdateState('downloaded')
-    } else {
-      setUpdateState('error')
-      setUpdateError(res.error ?? '下载失败，请重试')
-    }
-  }
-
-  const handleOpenFile = async (): Promise<void> => {
-    await window.clickerAPI.openFile(downloadedPath)
-  }
-
   return (
     <div className="flex flex-col h-full p-4 gap-4 overflow-y-auto">
       {/* Hotkey */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">全局快捷键</h3>
         <p className="text-xs text-slate-500 mb-4">在任意应用中按下即可启动/停止点击任务。</p>
-
         <div className="space-y-3">
           <div className="flex gap-2">
             {(['preset', 'custom'] as const).map(m => (
@@ -106,7 +61,6 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
               </button>
             ))}
           </div>
-
           {hotkeyMode === 'preset' ? (
             <div className="grid grid-cols-3 gap-2">
               {PRESET_KEYS.map(k => (
@@ -124,7 +78,6 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
               <p className="text-xs text-slate-400 mt-1">支持修饰键: CommandOrControl, Alt, Shift</p>
             </div>
           )}
-
           <div className="flex items-center gap-3">
             <div className="flex-1 text-sm text-slate-600">
               当前快捷键：
@@ -163,7 +116,7 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
         </div>
 
         {updateState === 'idle' && (
-          <button onClick={handleCheckUpdate}
+          <button onClick={onCheckUpdate}
             className="w-full py-2.5 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors">
             检查更新
           </button>
@@ -182,7 +135,7 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             已是最新版本
-            <button onClick={() => setUpdateState('idle')} className="ml-auto text-xs text-slate-400 hover:text-slate-600">重新检查</button>
+            <button onClick={() => onUpdateStateChange('idle')} className="ml-auto text-xs text-slate-400 hover:text-slate-600">重新检查</button>
           </div>
         )}
 
@@ -198,11 +151,9 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
               <p className="text-xs text-slate-500 bg-slate-50 rounded p-2 line-clamp-3">{releaseInfo.notes}</p>
             )}
             <div className="flex gap-2">
-              <button onClick={() => setUpdateState('idle')}
-                className="flex-1 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
-                稍后
-              </button>
-              <button onClick={handleDownload}
+              <button onClick={() => onUpdateStateChange('idle')}
+                className="flex-1 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">稍后</button>
+              <button onClick={onDownloadUpdate}
                 className="flex-1 py-2 text-sm text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors font-medium">
                 {releaseInfo.downloadUrl ? '立即下载' : '前往 GitHub 下载'}
               </button>
@@ -210,7 +161,6 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
           </div>
         )}
 
-        {/* Download progress */}
         {updateState === 'downloading' && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
@@ -218,16 +168,12 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
               <span className="font-mono">{downloadPercent}%</span>
             </div>
             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-              <div
-                className="h-2 bg-blue-500 rounded-full transition-all duration-300"
-                style={{ width: `${downloadPercent}%` }}
-              />
+              <div className="h-2 bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${downloadPercent}%` }} />
             </div>
-            <p className="text-xs text-slate-400 text-center">请勿关闭应用</p>
+            <p className="text-xs text-slate-400 text-center">请勿关闭应用，切换到其他功能页面不影响下载</p>
           </div>
         )}
 
-        {/* Download complete */}
         {updateState === 'downloaded' && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm text-green-600">
@@ -237,11 +183,9 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
               下载完成！
             </div>
             <p className="text-xs text-slate-400">
-              {window.clickerAPI.platform === 'darwin'
-                ? '打开安装包后，将应用拖入 Applications 文件夹完成安装。'
-                : '运行安装程序完成更新。'}
+              {window.clickerAPI.platform === 'darwin' ? '打开安装包后，将应用拖入 Applications 文件夹完成安装。' : '运行安装程序完成更新。'}
             </p>
-            <button onClick={handleOpenFile}
+            <button onClick={onOpenUpdate}
               className="w-full py-2.5 text-sm font-medium text-white bg-green-500 hover:bg-green-600 rounded-lg transition-colors">
               打开安装包
             </button>
@@ -252,15 +196,12 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
           <div className="space-y-2">
             <p className="text-xs text-red-500 leading-relaxed">{updateError}</p>
             <div className="flex items-center gap-3">
-              {/* If it looks like a network error, show resume hint */}
               {releaseInfo?.downloadUrl && (updateError.includes('ECONNRESET') || updateError.includes('ETIMEDOUT') || updateError.includes('ENOTFOUND') || updateError.includes('socket') || updateError.includes('network') || updateError.includes('connect')) ? (
-                <button onClick={handleDownload}
-                  className="text-xs text-blue-500 hover:text-blue-700 font-medium">
+                <button onClick={onDownloadUpdate} className="text-xs text-blue-500 hover:text-blue-700 font-medium">
                   ↺ 断网已暂停，点击继续下载
                 </button>
               ) : (
-                <button onClick={() => setUpdateState('idle')}
-                  className="text-xs text-slate-500 hover:text-blue-500">重试</button>
+                <button onClick={() => onUpdateStateChange('idle')} className="text-xs text-slate-500 hover:text-blue-500">重试</button>
               )}
             </div>
           </div>

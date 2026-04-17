@@ -24,6 +24,7 @@ mac:
   target:
     - target: dmg
   category: public.app-category.utilities
+  icon: resources/icons/mac/icon.icns
   extendInfo:
     NSAppleEventsUsageDescription: This app requires access to control your mouse.
     NSAccessibilityUsageDescription: This app requires Accessibility access to control your mouse.
@@ -33,6 +34,7 @@ win:
     - target: nsis
       arch:
         - x64
+  icon: resources/icons/win/icon.ico
   icon: resources/icon.ico
 
 nsis:

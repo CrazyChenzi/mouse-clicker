@@ -63,6 +63,46 @@ export default function App(): React.JSX.Element {
   const [windowHidden, setWindowHidden] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ── Update state (lifted here so it persists across tab switches) ──────────
+  const [updateState, setUpdateState] = useState<'idle'|'checking'|'latest'|'available'|'downloading'|'downloaded'|'error'>('idle')
+  const [releaseInfo, setReleaseInfo] = useState<import('./types').ReleaseInfo | null>(null)
+  const [updateError, setUpdateError] = useState('')
+  const [downloadPercent, setDownloadPercent] = useState(0)
+  const [downloadedPath, setDownloadedPath] = useState('')
+  const unsubProgress = useRef<(() => void) | null>(null)
+
+  const handleCheckUpdate = useCallback(async () => {
+    setUpdateState('checking')
+    setReleaseInfo(null)
+    setUpdateError('')
+    const res = await window.clickerAPI.checkForUpdates()
+    if (!res.ok) {
+      setUpdateState('error')
+      setUpdateError(res.error ?? '检查失败，请稍后重试')
+    } else if (res.info) {
+      setUpdateState('available')
+      setReleaseInfo(res.info)
+    } else {
+      setUpdateState('latest')
+    }
+  }, [])
+
+  const handleDownloadUpdate = useCallback(async () => {
+    if (!releaseInfo?.downloadUrl) { window.open(releaseInfo?.url); return }
+    setUpdateState('downloading')
+    unsubProgress.current?.()
+    unsubProgress.current = window.clickerAPI.onDownloadProgress(pct => setDownloadPercent(pct))
+    const res = await window.clickerAPI.downloadUpdate(releaseInfo.downloadUrl)
+    unsubProgress.current?.()
+    unsubProgress.current = null
+    if (res.ok && res.filePath) { setDownloadedPath(res.filePath); setUpdateState('downloaded') }
+    else { setUpdateState('error'); setUpdateError(res.error ?? '下载失败，请重试') }
+  }, [releaseInfo])
+
+  const handleOpenUpdate = useCallback(async () => {
+    await window.clickerAPI.openFile(downloadedPath)
+  }, [downloadedPath])
+
   const activeProfile = profiles.find(p => p.id === activeProfileId) ?? profiles[0]
 
   // ── Load saved data on startup ─────────────────────────────────────────────
@@ -188,7 +228,7 @@ export default function App(): React.JSX.Element {
       {/* Title bar */}
       <div
         className="drag-region flex items-center bg-white border-b border-slate-200"
-        style={{ height: isMac ? 52 : 40, paddingLeft: isMac ? 80 : 16, paddingRight: 12 }}
+        style={{ height: 40, paddingLeft: isMac ? 80 : 16, paddingRight: 12 }}
       >
         <span className="text-sm font-semibold text-slate-700">Mouse Clicker</span>
         {saveIndicator && (
@@ -258,9 +298,40 @@ export default function App(): React.JSX.Element {
             onSaveHotkey={handleHotkeySave}
             settings={settings}
             onSettingsChange={setSettings}
+            updateState={updateState}
+            releaseInfo={releaseInfo}
+            updateError={updateError}
+            downloadPercent={downloadPercent}
+            downloadedPath={downloadedPath}
+            onCheckUpdate={handleCheckUpdate}
+            onDownloadUpdate={handleDownloadUpdate}
+            onOpenUpdate={handleOpenUpdate}
+            onUpdateStateChange={setUpdateState}
           />
         )}
       </div>
+
+      {/* Global banner: download complete (visible on all tabs) */}
+      {updateState === 'downloaded' && (
+        <div className="bg-green-500 text-white px-4 py-2.5 flex items-center gap-3 text-sm shrink-0">
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="flex-1">新版本已下载完成，立即安装？</span>
+          <button
+            onClick={handleOpenUpdate}
+            className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-md font-medium transition-colors"
+          >
+            立即安装
+          </button>
+          <button
+            onClick={() => setUpdateState('idle')}
+            className="px-3 py-1 text-white/70 hover:text-white transition-colors"
+          >
+            稍后
+          </button>
+        </div>
+      )}
 
       {/* Bottom controls */}
       <Controls

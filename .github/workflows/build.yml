@@ -56,6 +56,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Generate app icons
+        run: pnpm run gen-icon
+        env:
+          ELECTRON_RUN_AS_NODE: ''
+
       - name: Rebuild robotjs for Electron (arm64)
         run: pnpm exec electron-rebuild -f -w robotjs
         env:
@@ -97,6 +102,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      - name: Generate app icons
+        run: pnpm run gen-icon
+        env:
+          ELECTRON_RUN_AS_NODE: ''
 
       - name: Rebuild robotjs for Electron (Windows x64)
         run: pnpm exec electron-rebuild -f -w robotjs
