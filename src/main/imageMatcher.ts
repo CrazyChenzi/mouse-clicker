@@ -1,6 +1,9 @@
 import { desktopCapturer, screen } from 'electron'
 import Jimp from 'jimp'
 import * as fs from 'fs'
+import * as path from 'path'
+import * as os from 'os'
+import { execFile } from 'child_process'
 
 export interface MatchResult {
   x: number   // logical screen x (for robotjs)
@@ -10,10 +13,42 @@ export interface MatchResult {
 
 /** Capture the primary display as a PNG Buffer */
 async function captureScreen(): Promise<Buffer> {
+  if (process.platform === 'darwin') {
+    return captureScreenMacOS()
+  }
+  return captureScreenDesktopCapturer()
+}
+
+/**
+ * macOS: use the `screencapture` CLI which properly respects Screen Recording
+ * permission. desktopCapturer.getSources() in the Electron main process returns
+ * black/blank thumbnails on macOS even when permission is granted.
+ */
+function captureScreenMacOS(): Promise<Buffer> {
+  const tmpPath = path.join(os.tmpdir(), `mc-cap-${Date.now()}.png`)
+  return new Promise((resolve, reject) => {
+    // -x: silent (no shutter sound), -t png: PNG format, -S: include cursor (omit for cleaner)
+    execFile('screencapture', ['-x', '-t', 'png', tmpPath], (err) => {
+      if (err) {
+        reject(new Error(`screencapture 失败: ${err.message} — 请确认已授予屏幕录制权限`))
+        return
+      }
+      try {
+        const buf = fs.readFileSync(tmpPath)
+        fs.unlinkSync(tmpPath)
+        resolve(buf)
+      } catch (e) {
+        reject(e)
+      }
+    })
+  })
+}
+
+/** Windows / other: use Electron's desktopCapturer */
+async function captureScreenDesktopCapturer(): Promise<Buffer> {
   const display = screen.getPrimaryDisplay()
   const { scaleFactor } = display
   const { width, height } = display.size
-  // Request at physical resolution so the screenshot is crisp
   const physW = Math.round(width * scaleFactor)
   const physH = Math.round(height * scaleFactor)
 
@@ -23,7 +58,9 @@ async function captureScreen(): Promise<Buffer> {
   })
   if (sources.length === 0) throw new Error('屏幕截图失败：未找到屏幕源，请检查屏幕录制权限')
   const source = sources.find(s => s.name.includes('1') || s.name.toLowerCase().includes('entire')) ?? sources[0]
-  return source.thumbnail.toPNG()
+  const png = source.thumbnail.toPNG()
+  if (png.length < 1000) throw new Error('屏幕截图返回空白图像，请检查屏幕录制权限')
+  return png
 }
 
 /**
@@ -154,17 +191,10 @@ export async function captureAndCropRegion(
 ): Promise<{ base64: string; centerX: number; centerY: number }> {
   const display = screen.getPrimaryDisplay()
   const { scaleFactor } = display
-  const physW = Math.round(display.size.width * scaleFactor)
-  const physH = Math.round(display.size.height * scaleFactor)
 
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: { width: physW, height: physH }
-  })
-  if (sources.length === 0) throw new Error('屏幕截图失败，请检查屏幕录制权限')
-
-  const source = sources.find(s => s.name.includes('1') || s.name.toLowerCase().includes('entire')) ?? sources[0]
-  const screenshotPng = source.thumbnail.toPNG()
+  // captureScreen() uses screencapture on macOS (full physical resolution PNG)
+  // and desktopCapturer on Windows
+  const screenshotPng = await captureScreen()
 
   const img = await Jimp.read(screenshotPng)
 
