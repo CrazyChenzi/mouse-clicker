@@ -272,18 +272,33 @@ export function registerIpcHandlers(
   // App version
   ipcMain.handle('app:version', () => app.getVersion())
 
-  // ── Update download ─────────────────────────────────────────────────────────
+  // ── Update download (with resume support) ──────────────────────────────────
   ipcMain.handle('updater:download', async (_event, downloadUrl: string) => {
     const win = getMainWindow()
-    const os = require('os') as typeof import('os')
+    // Use userData/downloads so partial files survive app restarts
+    const downloadsDir = path.join(app.getPath('userData'), 'downloads')
+    if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true })
+
     const fileName = downloadUrl.split('/').pop() ?? 'MouseClicker-update'
-    const destPath = path.join(os.tmpdir(), fileName)
+    const destPath = path.join(downloadsDir, fileName)
+    const infoPath = destPath + '.info'
+
+    // If file already fully downloaded (no sidecar .info), return it immediately
+    if (fs.existsSync(destPath) && !fs.existsSync(infoPath)) {
+      const size = fs.existsSync(destPath) ? fs.statSync(destPath).size : 0
+      if (size > 0) {
+        win?.webContents.send('updater:download-progress', 100)
+        return { ok: true, filePath: destPath }
+      }
+    }
+
     try {
       await downloadUpdate(downloadUrl, destPath, (progress) => {
         win?.webContents.send('updater:download-progress', Math.round(progress * 100))
       })
       return { ok: true, filePath: destPath }
     } catch (e) {
+      // Partial file is preserved for next resume attempt
       return { ok: false, error: String(e) }
     }
   })

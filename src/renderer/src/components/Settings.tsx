@@ -60,14 +60,14 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
 
   const handleDownload = async (): Promise<void> => {
     if (!releaseInfo?.downloadUrl) {
-      // No direct download link for this platform, open GitHub page
       window.open(releaseInfo?.url)
       return
     }
     setUpdateState('downloading')
-    setDownloadPercent(0)
+    // Don't reset to 0 — the main process will emit the resume progress
+    // immediately, so the bar will jump to the right position
 
-    // Subscribe to progress events
+    // Subscribe to progress events before calling download
     unsubProgress.current?.()
     unsubProgress.current = window.clickerAPI.onDownloadProgress((pct) => {
       setDownloadPercent(pct)
@@ -214,7 +214,7 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
         {updateState === 'downloading' && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>下载中…</span>
+              <span>{downloadPercent > 0 && downloadPercent < 100 ? '下载中…' : '准备中…'}</span>
               <span className="font-mono">{downloadPercent}%</span>
             </div>
             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
@@ -251,7 +251,18 @@ export default function Settings({ hotkey, onSaveHotkey, settings, onSettingsCha
         {updateState === 'error' && (
           <div className="space-y-2">
             <p className="text-xs text-red-500 leading-relaxed">{updateError}</p>
-            <button onClick={() => setUpdateState('idle')} className="text-xs text-slate-500 hover:text-blue-500">重试</button>
+            <div className="flex items-center gap-3">
+              {/* If it looks like a network error, show resume hint */}
+              {releaseInfo?.downloadUrl && (updateError.includes('ECONNRESET') || updateError.includes('ETIMEDOUT') || updateError.includes('ENOTFOUND') || updateError.includes('socket') || updateError.includes('network') || updateError.includes('connect')) ? (
+                <button onClick={handleDownload}
+                  className="text-xs text-blue-500 hover:text-blue-700 font-medium">
+                  ↺ 断网已暂停，点击继续下载
+                </button>
+              ) : (
+                <button onClick={() => setUpdateState('idle')}
+                  className="text-xs text-slate-500 hover:text-blue-500">重试</button>
+              )}
+            </div>
           </div>
         )}
       </div>
