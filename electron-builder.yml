@@ -35,7 +35,6 @@ win:
       arch:
         - x64
   icon: resources/icons/win/icon.ico
-  icon: resources/icon.ico
 
 nsis:
   oneClick: false
