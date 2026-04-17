@@ -40,3 +40,11 @@ export interface AppData {
 }
 
 export type AppStatus = 'idle' | 'running' | 'scheduled' | string
+
+export interface ReleaseInfo {
+  tag: string
+  version: string
+  url: string
+  publishedAt: string
+  notes: string
+}

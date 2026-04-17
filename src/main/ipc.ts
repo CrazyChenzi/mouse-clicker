@@ -11,6 +11,7 @@ import * as path from 'path'
 import { executeTask, stopTask, getIsRunning } from './autoClicker'
 import { startRecording, stopRecording } from './recorder'
 import { scheduleTask, cancelSchedule, isScheduled } from './scheduler'
+import { checkForUpdates } from './updater'
 import { ClickTask, HotkeyConfig, ScheduleConfig, AppData } from '../renderer/src/types'
 
 const PROFILES_FILE = path.join(app.getPath('userData'), 'profiles.json')
@@ -235,5 +236,30 @@ export function registerIpcHandlers(
     if (getIsRunning()) return 'running'
     if (isScheduled()) return 'scheduled'
     return 'idle'
+  })
+
+  // ── Window visibility ───────────────────────────────────────────────────────
+  ipcMain.handle('window:hide', async () => {
+    getMainWindow()?.hide()
+    return { ok: true }
+  })
+
+  ipcMain.handle('window:show', async () => {
+    const win = getMainWindow()
+    if (win) {
+      win.show()
+      win.focus()
+    }
+    return { ok: true }
+  })
+
+  // ── Update checker ──────────────────────────────────────────────────────────
+  ipcMain.handle('updater:check', async () => {
+    try {
+      const info = await checkForUpdates()
+      return { ok: true, info }
+    } catch (e) {
+      return { ok: false, error: String(e), info: null }
+    }
   })
 }

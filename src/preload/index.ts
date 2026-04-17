@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { ClickTask, HotkeyConfig, RecordedPoint, ScheduleConfig, AppData } from '../renderer/src/types'
+import { ClickTask, HotkeyConfig, RecordedPoint, ScheduleConfig, AppData, ReleaseInfo } from '../renderer/src/types'
 
 const clickerAPI = {
   platform: process.platform,
@@ -26,7 +26,13 @@ const clickerAPI = {
   },
   pickerPicked: (coords: { x: number; y: number }) =>
     ipcRenderer.send('picker:picked', coords),
-  pickerCancel: () => ipcRenderer.send('picker:cancel')
+  pickerCancel: () => ipcRenderer.send('picker:cancel'),
+  // Window visibility
+  hideWindow: () => ipcRenderer.invoke('window:hide'),
+  showWindow: () => ipcRenderer.invoke('window:show'),
+  // Update checker
+  checkForUpdates: (): Promise<{ ok: boolean; info: ReleaseInfo | null; error?: string }> =>
+    ipcRenderer.invoke('updater:check')
 }
 
 if (process.contextIsolated) {

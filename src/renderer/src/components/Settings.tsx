@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { HotkeyConfig } from '../types'
+import { HotkeyConfig, ReleaseInfo } from '../types'
 
 interface Props {
   hotkey: HotkeyConfig
@@ -16,12 +16,39 @@ export default function Settings({ hotkey, onSaveHotkey }: Props): React.JSX.Ele
   )
   const [hotkeySaved, setHotkeySaved] = useState(false)
 
+  const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'latest' | 'available' | 'error'>('idle')
+  const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null)
+  const [updateError, setUpdateError] = useState('')
+
   const handleSaveHotkey = async (): Promise<void> => {
     const k = hotkeyMode === 'preset' ? key : customKey
     if (!k) return
     await onSaveHotkey({ startStop: k })
     setHotkeySaved(true)
     setTimeout(() => setHotkeySaved(false), 2000)
+  }
+
+  const handleCheckUpdate = async (): Promise<void> => {
+    setUpdateState('checking')
+    setReleaseInfo(null)
+    setUpdateError('')
+    const res = await window.clickerAPI.checkForUpdates()
+    if (!res.ok) {
+      setUpdateState('error')
+      setUpdateError(res.error ?? '检查失败，请稍后重试')
+    } else if (res.info) {
+      setUpdateState('available')
+      setReleaseInfo(res.info)
+    } else {
+      setUpdateState('latest')
+    }
+  }
+
+  const openReleasePage = (): void => {
+    if (releaseInfo?.url) {
+      // open in default browser via Electron shell
+      window.open(releaseInfo.url)
+    }
   }
 
   return (
@@ -99,6 +126,77 @@ export default function Settings({ hotkey, onSaveHotkey }: Props): React.JSX.Ele
         </div>
       </div>
 
+      {/* Check for updates */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-slate-700 mb-2">检查更新</h3>
+        <p className="text-xs text-slate-500 mb-4">
+          当前版本：<span className="font-mono font-medium text-slate-700">{/* version injected at build time */}</span>
+        </p>
+
+        {updateState === 'idle' && (
+          <button
+            onClick={handleCheckUpdate}
+            className="w-full py-2.5 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
+          >
+            检查更新
+          </button>
+        )}
+
+        {updateState === 'checking' && (
+          <div className="flex items-center justify-center gap-2 py-2.5 text-sm text-slate-500">
+            <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            检查中…
+          </div>
+        )}
+
+        {updateState === 'latest' && (
+          <div className="flex items-center gap-2 py-2 text-sm text-green-600">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            已是最新版本
+            <button onClick={() => setUpdateState('idle')} className="ml-auto text-xs text-slate-400 hover:text-slate-600">重新检查</button>
+          </div>
+        )}
+
+        {updateState === 'available' && releaseInfo && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-blue-600">
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>发现新版本 <strong>{releaseInfo.tag}</strong></span>
+            </div>
+            {releaseInfo.notes && (
+              <p className="text-xs text-slate-500 bg-slate-50 rounded p-2 line-clamp-3">
+                {releaseInfo.notes}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setUpdateState('idle')}
+                className="flex-1 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                稍后
+              </button>
+              <button
+                onClick={openReleasePage}
+                className="flex-1 py-2 text-sm text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors font-medium"
+              >
+                前往下载
+              </button>
+            </div>
+          </div>
+        )}
+
+        {updateState === 'error' && (
+          <div className="space-y-2">
+            <p className="text-xs text-red-500">{updateError}</p>
+            <button onClick={() => setUpdateState('idle')} className="text-xs text-slate-500 hover:text-blue-500">重试</button>
+          </div>
+        )}
+      </div>
+
       {/* Auto-save hint */}
       <div className="bg-green-50 border border-green-200 rounded-xl p-4">
         <div className="flex gap-2">
@@ -107,7 +205,7 @@ export default function Settings({ hotkey, onSaveHotkey }: Props): React.JSX.Ele
           </svg>
           <div className="text-xs text-green-700">
             <p className="font-medium mb-0.5">自动保存已启用</p>
-            <p>所有任务配置会在修改后自动保存到本地，下次启动时自动恢复。标题栏会显示「已保存」提示。</p>
+            <p>所有任务配置会在修改后自动保存到本地，下次启动时自动恢复。</p>
           </div>
         </div>
       </div>
@@ -116,8 +214,16 @@ export default function Settings({ hotkey, onSaveHotkey }: Props): React.JSX.Ele
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-3">关于</h3>
         <div className="space-y-1 text-xs text-slate-500">
-          <p>Mouse Clicker v1.0.0</p>
+          <p>Mouse Clicker</p>
           <p>一款跨平台鼠标自动点击工具</p>
+          <a
+            href="https://github.com/CrazyChenzi/mouse-clicker"
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-500 hover:underline"
+          >
+            GitHub
+          </a>
         </div>
       </div>
     </div>

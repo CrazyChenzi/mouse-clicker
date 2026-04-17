@@ -14,12 +14,15 @@ export default function ClickEditor({ action: initial, onSave, onCancel }: Props
 
   const handlePickCoordinate = async (): Promise<void> => {
     setPicking(true)
+    // Hide main window so it doesn't block the screen during coordinate pick
+    await window.clickerAPI.hideWindow()
     try {
       const coords = await window.clickerAPI.pickCoordinate()
       if (coords) {
         setAction((a) => ({ ...a, x: coords.x, y: coords.y }))
       }
     } finally {
+      await window.clickerAPI.showWindow()
       setPicking(false)
     }
   }
