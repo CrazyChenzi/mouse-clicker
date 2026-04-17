@@ -1,4 +1,4 @@
-import { net, app } from 'electron'
+import { app } from 'electron'
 import * as https from 'https'
 import * as http from 'http'
 import * as fs from 'fs'
@@ -39,26 +39,53 @@ function getAssetUrl(assets: Array<{ name: string; browser_download_url: string 
 
 export function checkForUpdates(): Promise<ReleaseInfo | null> {
   return new Promise((resolve, reject) => {
-    const req = net.request({
-      url: `https://api.github.com/repos/${REPO}/releases/latest`,
-      method: 'GET'
-    })
-    req.setHeader('User-Agent', `MouseClicker/${app.getVersion()}`)
-    req.setHeader('Accept', 'application/vnd.github+json')
+    // Use Node.js https instead of Electron net.request for better compatibility
+    const options = {
+      hostname: 'api.github.com',
+      path: `/repos/${REPO}/releases/latest`,
+      method: 'GET',
+      headers: {
+        'User-Agent': `MouseClicker/${app.getVersion()}`,
+        'Accept': 'application/vnd.github+json',
+        // Recommended by GitHub docs; helps avoid rate-limit surprises
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    }
 
-    let body = ''
-    req.on('response', (res) => {
+    const req = https.request(options, (res) => {
+      let body = ''
       res.on('data', (chunk) => { body += chunk })
       res.on('end', () => {
         try {
-          if (res.statusCode === 404) {
-            reject(new Error('GitHub 上暂无已发布的版本，请先在 GitHub Releases 页面将 Draft Release 发布'))
+          const status = res.statusCode ?? 0
+
+          if (status === 403 || status === 429) {
+            // Rate limited — tell the user when they can retry
+            const resetHeader = res.headers['x-ratelimit-reset']
+            const remaining = res.headers['x-ratelimit-remaining']
+            if ((remaining === '0' || status === 403) && resetHeader) {
+              const resetMs = parseInt(String(resetHeader), 10) * 1000
+              const resetTime = new Date(resetMs).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+              reject(new Error(`GitHub API 请求次数已达上限，请在 ${resetTime} 后重试（每小时限 60 次未认证请求）`))
+            } else {
+              reject(new Error(`GitHub API 访问受限 (HTTP ${status})，请稍后重试`))
+            }
             return
           }
-          if (res.statusCode !== 200) {
-            reject(new Error(`GitHub API 返回错误 (HTTP ${res.statusCode})，请稍后重试`))
+
+          if (status === 404) {
+            reject(new Error('GitHub 上暂无已发布的版本，请先将 Draft Release 发布'))
             return
           }
+
+          if (status !== 200) {
+            // Include the response body for easier debugging
+            let hint = ''
+            try { hint = JSON.parse(body).message ?? '' } catch { /* ignore */ }
+            reject(new Error(`GitHub API 返回错误 (HTTP ${status})${hint ? `：${hint}` : ''}，请稍后重试`))
+            return
+          }
+
           const release = JSON.parse(body)
           const tag: string = release.tag_name ?? ''
           if (!tag) { resolve(null); return }
@@ -83,7 +110,9 @@ export function checkForUpdates(): Promise<ReleaseInfo | null> {
         }
       })
     })
-    req.on('error', reject)
+
+    req.on('error', (e) => reject(new Error(`网络请求失败：${e.message}`)))
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('检查更新超时，请检查网络连接')) })
     req.end()
   })
 }
