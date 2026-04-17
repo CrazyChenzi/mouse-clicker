@@ -13,6 +13,7 @@ import { startRecording, stopRecording } from './recorder'
 import { scheduleTask, cancelSchedule, isScheduled } from './scheduler'
 import { checkForUpdates, downloadUpdate } from './updater'
 import { fileToBase64, captureAndCropRegion } from './imageMatcher'
+import { recognizeText } from './ocr'
 import { ClickTask, HotkeyConfig, ScheduleConfig, AppData } from '../renderer/src/types'
 
 const PROFILES_FILE = path.join(app.getPath('userData'), 'profiles.json')
@@ -372,6 +373,21 @@ export function registerIpcHandlers(
       ipcMain.once('region:cancel', onCancel)
       regionWindow.on('closed', () => { ipcMain.removeListener('region:picked', onPicked); ipcMain.removeListener('region:cancel', onCancel); resolve({ ok: false }) })
     })
+  })
+
+  // ── OCR ────────────────────────────────────────────────────────────────────
+  ipcMain.handle('ocr:recognize', async (_event, base64: string) => {
+    const tmpPath = path.join(app.getPath('userData'), `ocr-${Date.now()}.png`)
+    try {
+      const buf = Buffer.from(base64.replace(/^data:[^;]+;base64,/, ''), 'base64')
+      fs.writeFileSync(tmpPath, buf)
+      const text = await recognizeText(tmpPath)
+      return { ok: true, text }
+    } catch (e) {
+      return { ok: false, text: '', error: String(e) }
+    } finally {
+      try { fs.unlinkSync(tmpPath) } catch { /* ignore */ }
+    }
   })
 
   // ── Image pick (open file dialog and return base64) ─────────────────────────

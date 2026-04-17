@@ -35,6 +35,9 @@ const clickerAPI = {
     ipcRenderer.invoke('updater:check'),
   // App version
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
+  // OCR
+  recognizeText: (base64: string): Promise<{ ok: boolean; text: string; error?: string }> =>
+    ipcRenderer.invoke('ocr:recognize', base64),
   // Image pick
   pickImage: (): Promise<{ ok: boolean; base64?: string; name?: string; error?: string }> =>
     ipcRenderer.invoke('image:pick'),
