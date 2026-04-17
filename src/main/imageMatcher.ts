@@ -144,3 +144,42 @@ export function fileToBase64(filePath: string): string {
   const data = fs.readFileSync(filePath)
   return `data:${mime};base64,${data.toString('base64')}`
 }
+
+/**
+ * Capture a region of the primary display and return it as a base64 PNG.
+ * `region` uses logical (CSS) screen coordinates.
+ */
+export async function captureAndCropRegion(
+  region: { x: number; y: number; width: number; height: number }
+): Promise<{ base64: string; centerX: number; centerY: number }> {
+  const display = screen.getPrimaryDisplay()
+  const { scaleFactor } = display
+  const physW = Math.round(display.size.width * scaleFactor)
+  const physH = Math.round(display.size.height * scaleFactor)
+
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: physW, height: physH }
+  })
+  if (sources.length === 0) throw new Error('屏幕截图失败，请检查屏幕录制权限')
+
+  const source = sources.find(s => s.name.includes('1') || s.name.toLowerCase().includes('entire')) ?? sources[0]
+  const screenshotPng = source.thumbnail.toPNG()
+
+  const img = await Jimp.read(screenshotPng)
+
+  // Convert logical coords → physical pixels for cropping
+  const cropX = Math.round(region.x * scaleFactor)
+  const cropY = Math.round(region.y * scaleFactor)
+  const cropW = Math.max(1, Math.round(region.width * scaleFactor))
+  const cropH = Math.max(1, Math.round(region.height * scaleFactor))
+
+  img.crop(cropX, cropY, cropW, cropH)
+  const base64 = await img.getBase64Async(Jimp.MIME_PNG)
+
+  return {
+    base64,
+    centerX: Math.round(region.x + region.width / 2),
+    centerY: Math.round(region.y + region.height / 2)
+  }
+}

@@ -12,7 +12,7 @@ import { executeTask, stopTask, getIsRunning } from './autoClicker'
 import { startRecording, stopRecording } from './recorder'
 import { scheduleTask, cancelSchedule, isScheduled } from './scheduler'
 import { checkForUpdates, downloadUpdate } from './updater'
-import { fileToBase64 } from './imageMatcher'
+import { fileToBase64, captureAndCropRegion } from './imageMatcher'
 import { ClickTask, HotkeyConfig, ScheduleConfig, AppData } from '../renderer/src/types'
 
 const PROFILES_FILE = path.join(app.getPath('userData'), 'profiles.json')
@@ -293,6 +293,70 @@ export function registerIpcHandlers(
     const { shell } = require('electron')
     const err = await shell.openPath(filePath)
     return { ok: !err, error: err || undefined }
+  })
+
+  // ── Screen region capture ────────────────────────────────────────────────────
+  ipcMain.handle('screen:capture-region', async () => {
+    return new Promise<{ ok: boolean; base64?: string; name?: string; centerX?: number; centerY?: number; error?: string }>((resolve) => {
+      const display = screen.getPrimaryDisplay()
+      const { x: dx, y: dy, width, height } = display.bounds
+
+      const regionWindow = new BrowserWindow({
+        x: dx, y: dy, width, height,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        resizable: false,
+        movable: false,
+        skipTaskbar: true,
+        hasShadow: false,
+        webPreferences: {
+          preload: join(__dirname, '../preload/index.js'),
+          sandbox: false,
+          contextIsolation: true
+        }
+      })
+      regionWindow.setAlwaysOnTop(true, 'screen-saver')
+      regionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+      if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
+        regionWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '/regionPicker.html')
+      } else {
+        regionWindow.loadFile(join(__dirname, '../renderer/regionPicker.html'))
+      }
+
+      regionWindow.once('ready-to-show', () => {
+        regionWindow.show()
+        regionWindow.focus()
+      })
+
+      const cleanupRegion = (): void => {
+        if (!regionWindow.isDestroyed()) regionWindow.close()
+        ipcMain.removeListener('region:picked', onPicked)
+        ipcMain.removeListener('region:cancel', onCancel)
+      }
+
+      const onPicked = async (_e: unknown, region: { x: number; y: number; width: number; height: number }): Promise<void> => {
+        cleanupRegion()
+        // Small delay so the overlay window fully closes before we screenshot
+        await new Promise(r => setTimeout(r, 150))
+        try {
+          const result = await captureAndCropRegion(region)
+          resolve({ ok: true, base64: result.base64, name: 'capture.png', centerX: result.centerX, centerY: result.centerY })
+        } catch (e) {
+          resolve({ ok: false, error: String(e) })
+        }
+      }
+
+      const onCancel = (): void => {
+        cleanupRegion()
+        resolve({ ok: false })
+      }
+
+      ipcMain.once('region:picked', onPicked)
+      ipcMain.once('region:cancel', onCancel)
+      regionWindow.on('closed', () => { ipcMain.removeListener('region:picked', onPicked); ipcMain.removeListener('region:cancel', onCancel); resolve({ ok: false }) })
+    })
   })
 
   // ── Image pick (open file dialog and return base64) ─────────────────────────
