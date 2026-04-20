@@ -1,9 +1,7 @@
-import { desktopCapturer, screen } from 'electron'
+import { desktopCapturer, screen, systemPreferences } from 'electron'
 import Jimp from 'jimp'
 import * as fs from 'fs'
-import * as path from 'path'
-import * as os from 'os'
-import { execFile } from 'child_process'
+import { exec, spawn } from 'child_process'
 
 export interface MatchResult {
   x: number   // logical screen x (for robotjs)
@@ -13,29 +11,90 @@ export interface MatchResult {
 
 /** Capture the primary display as a PNG Buffer */
 async function captureScreen(): Promise<Buffer> {
-  if (process.platform === 'darwin') {
-    return captureScreenMacOS()
-  }
+  if (process.platform === 'darwin') return captureScreenMacOS()
   return captureScreenDesktopCapturer()
 }
 
 /**
- * macOS: use the `screencapture` CLI which properly respects Screen Recording
- * permission. desktopCapturer.getSources() in the Electron main process returns
- * black/blank thumbnails on macOS even when permission is granted.
+ * macOS screen capture with three-level fallback strategy:
+ *  1. screencapture → stdout  (no file I/O, fastest)
+ *  2. screencapture → /tmp file  (fallback if stdout fails)
+ *  3. desktopCapturer  (last resort, may produce blank image without permission)
+ *
+ * Uses /usr/sbin/screencapture with full path so Electron's PATH doesn't matter.
+ * Also checks systemPreferences.getMediaAccessStatus('screen') upfront.
  */
-function captureScreenMacOS(): Promise<Buffer> {
-  const tmpPath = path.join(os.tmpdir(), `mc-cap-${Date.now()}.png`)
+async function captureScreenMacOS(): Promise<Buffer> {
+  // Check permission status first — gives a clear error message
+  const status = (systemPreferences as unknown as Record<string, (s: string) => string>)
+    .getMediaAccessStatus?.('screen') ?? 'unknown'
+
+  if (status === 'denied') {
+    throw new Error(
+      '屏幕录制权限已被拒绝。\n' +
+      '请前往：系统设置 → 隐私与安全性 → 屏幕录制\n' +
+      '找到本应用并启用，然后重启应用再试。'
+    )
+  }
+
+  // Strategy 1: screencapture → stdout (no file system involved)
+  try {
+    return await screencaptureToStdout()
+  } catch (e1) {
+    console.warn('[screenshot] stdout failed:', (e1 as Error).message)
+  }
+
+  // Strategy 2: screencapture → temp file
+  try {
+    return await screencaptureToFile()
+  } catch (e2) {
+    console.warn('[screenshot] file failed:', (e2 as Error).message)
+    // Re-throw with helpful message
+    throw new Error(
+      '屏幕截图失败。如果已授权屏幕录制权限，请重启应用后再试。\n' +
+      '（系统设置 → 隐私与安全性 → 屏幕录制）'
+    )
+  }
+}
+
+/** screencapture → stdout (avoids all file-system permission issues) */
+function screencaptureToStdout(): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    // -x: silent (no shutter sound), -t png: PNG format, -S: include cursor (omit for cleaner)
-    execFile('screencapture', ['-x', '-t', 'png', tmpPath], (err) => {
+    const chunks: Buffer[] = []
+    // Use full path; '-' as filename means write to stdout
+    const proc = spawn('/usr/sbin/screencapture', ['-x', '-t', 'png', '-'])
+    proc.stdout.on('data', (chunk: Buffer) => chunks.push(chunk))
+    const done = (code: number | null): void => {
+      const buf = Buffer.concat(chunks)
+      if (code === 0 && buf.length > 5000) {
+        resolve(buf)
+      } else {
+        reject(new Error(`exit ${code}, size ${buf.length}`))
+      }
+    }
+    proc.on('close', done)
+    proc.on('error', reject)
+    setTimeout(() => { proc.kill(); reject(new Error('timeout')) }, 10_000)
+  })
+}
+
+/** screencapture → /tmp file (fallback) */
+function screencaptureToFile(): Promise<Buffer> {
+  // Use /tmp directly (universally writable on macOS, unlike os.tmpdir() in some sandbox configs)
+  const tmpPath = `/tmp/mc-cap-${Date.now()}.png`
+  return new Promise((resolve, reject) => {
+    exec(`/usr/sbin/screencapture -x "${tmpPath}"`, { timeout: 10_000 }, (err, _stdout, stderr) => {
       if (err) {
-        reject(new Error(`screencapture 失败: ${err.message} — 请确认已授予屏幕录制权限`))
+        reject(new Error(`screencapture error: ${stderr?.trim() || err.message}`))
         return
       }
       try {
         const buf = fs.readFileSync(tmpPath)
-        fs.unlinkSync(tmpPath)
+        try { fs.unlinkSync(tmpPath) } catch { /* ignore */ }
+        if (buf.length < 5000) {
+          reject(new Error(`screenshot too small (${buf.length} bytes) — permission may not be granted`))
+          return
+        }
         resolve(buf)
       } catch (e) {
         reject(e)
