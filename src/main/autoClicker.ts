@@ -1,5 +1,4 @@
 import { ClickTask } from '../renderer/src/types'
-import { findImageOnScreen } from './imageMatcher'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const robot = require('robotjs')
@@ -30,32 +29,16 @@ export async function executeTask(
       for (let i = 0; i < actions.length; i++) {
         if (shouldStop) break
         const action = actions[i]
+        const maxClicks = action.infiniteCount ? Infinity : action.count
 
         try {
-          let clickX = action.x
-          let clickY = action.y
-
-          // ── Image-type action: find template on screen first ────────────────
-          if (action.type === 'image' && action.imageBase64) {
-            const result = await findImageOnScreen(
-              action.imageBase64,
-              action.confidence ?? 0.8
-            )
-            if (!result) {
-              console.warn(`[autoClicker] Image not found on screen (action ${i}), skipping`)
-              continue
-            }
-            clickX = result.x
-            clickY = result.y
-          }
-
-          robot.moveMouse(clickX, clickY)
+          robot.moveMouse(action.x, action.y)
           await sleep(50)
 
-          for (let c = 0; c < action.count; c++) {
+          for (let c = 0; c < maxClicks; c++) {
             if (shouldStop) break
             robot.mouseClick(action.button, false)
-            if (c < action.count - 1) await sleep(action.delayBetweenClicks)
+            if (c < maxClicks - 1) await sleep(action.delayBetweenClicks)
           }
         } catch (robotErr) {
           console.error('[autoClicker] error:', robotErr)

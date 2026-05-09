@@ -40,11 +40,6 @@ declare global {
       showWindow: () => Promise<{ ok: boolean }>
       checkForUpdates: () => Promise<{ ok: boolean; info: import('./types').ReleaseInfo | null; error?: string }>
       getVersion: () => Promise<string>
-      pickImage: () => Promise<{ ok: boolean; base64?: string; name?: string; error?: string }>
-      captureRegion: () => Promise<{ ok: boolean; base64?: string; name?: string; centerX?: number; centerY?: number; error?: string }>
-      recognizeText: (base64: string) => Promise<{ ok: boolean; text: string; error?: string }>
-      regionPicked: (region: { x: number; y: number; width: number; height: number }) => void
-      regionCancel: () => void
       downloadUpdate: (downloadUrl: string) => Promise<{ ok: boolean; filePath?: string; error?: string }>
       onDownloadProgress: (cb: (percent: number) => void) => () => void
       openFile: (filePath: string) => Promise<{ ok: boolean; error?: string }>

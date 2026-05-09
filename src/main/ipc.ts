@@ -12,8 +12,6 @@ import { executeTask, stopTask, getIsRunning } from './autoClicker'
 import { startRecording, stopRecording } from './recorder'
 import { scheduleTask, cancelSchedule, isScheduled } from './scheduler'
 import { checkForUpdates, downloadUpdate } from './updater'
-import { fileToBase64, captureAndCropRegion } from './imageMatcher'
-import { recognizeText } from './ocr'
 import { ClickTask, HotkeyConfig, ScheduleConfig, AppData } from '../renderer/src/types'
 
 const PROFILES_FILE = path.join(app.getPath('userData'), 'profiles.json')
@@ -311,101 +309,4 @@ export function registerIpcHandlers(
     return { ok: !err, error: err || undefined }
   })
 
-  // ── Screen region capture ────────────────────────────────────────────────────
-  ipcMain.handle('screen:capture-region', async () => {
-    return new Promise<{ ok: boolean; base64?: string; name?: string; centerX?: number; centerY?: number; error?: string }>((resolve) => {
-      const display = screen.getPrimaryDisplay()
-      const { x: dx, y: dy, width, height } = display.bounds
-
-      const regionWindow = new BrowserWindow({
-        x: dx, y: dy, width, height,
-        frame: false,
-        transparent: true,
-        alwaysOnTop: true,
-        resizable: false,
-        movable: false,
-        skipTaskbar: true,
-        hasShadow: false,
-        webPreferences: {
-          preload: join(__dirname, '../preload/index.js'),
-          sandbox: false,
-          contextIsolation: true
-        }
-      })
-      regionWindow.setAlwaysOnTop(true, 'screen-saver')
-      regionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-
-      if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-        regionWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '/regionPicker.html')
-      } else {
-        regionWindow.loadFile(join(__dirname, '../renderer/regionPicker.html'))
-      }
-
-      regionWindow.once('ready-to-show', () => {
-        regionWindow.show()
-        regionWindow.focus()
-      })
-
-      const cleanupRegion = (): void => {
-        if (!regionWindow.isDestroyed()) regionWindow.close()
-        ipcMain.removeListener('region:picked', onPicked)
-        ipcMain.removeListener('region:cancel', onCancel)
-      }
-
-      const onPicked = async (_e: unknown, region: { x: number; y: number; width: number; height: number }): Promise<void> => {
-        cleanupRegion()
-        // Small delay so the overlay window fully closes before we screenshot
-        await new Promise(r => setTimeout(r, 150))
-        try {
-          const result = await captureAndCropRegion(region)
-          resolve({ ok: true, base64: result.base64, name: 'capture.png', centerX: result.centerX, centerY: result.centerY })
-        } catch (e) {
-          resolve({ ok: false, error: String(e) })
-        }
-      }
-
-      const onCancel = (): void => {
-        cleanupRegion()
-        resolve({ ok: false })
-      }
-
-      ipcMain.once('region:picked', onPicked)
-      ipcMain.once('region:cancel', onCancel)
-      regionWindow.on('closed', () => { ipcMain.removeListener('region:picked', onPicked); ipcMain.removeListener('region:cancel', onCancel); resolve({ ok: false }) })
-    })
-  })
-
-  // ── OCR ────────────────────────────────────────────────────────────────────
-  ipcMain.handle('ocr:recognize', async (_event, base64: string) => {
-    const tmpPath = path.join(app.getPath('userData'), `ocr-${Date.now()}.png`)
-    try {
-      const buf = Buffer.from(base64.replace(/^data:[^;]+;base64,/, ''), 'base64')
-      fs.writeFileSync(tmpPath, buf)
-      const text = await recognizeText(tmpPath)
-      return { ok: true, text }
-    } catch (e) {
-      return { ok: false, text: '', error: String(e) }
-    } finally {
-      try { fs.unlinkSync(tmpPath) } catch { /* ignore */ }
-    }
-  })
-
-  // ── Image pick (open file dialog and return base64) ─────────────────────────
-  ipcMain.handle('image:pick', async () => {
-    const { dialog } = require('electron')
-    const result = await dialog.showOpenDialog(getMainWindow()!, {
-      title: '选择参考图片',
-      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'bmp'] }],
-      properties: ['openFile']
-    })
-    if (result.canceled || result.filePaths.length === 0) return { ok: false }
-    const filePath = result.filePaths[0]
-    const name = filePath.split(/[/\\]/).pop() ?? 'image'
-    try {
-      const base64 = fileToBase64(filePath)
-      return { ok: true, base64, name }
-    } catch (e) {
-      return { ok: false, error: String(e) }
-    }
-  })
-}
+  }

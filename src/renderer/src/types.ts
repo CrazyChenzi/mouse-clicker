@@ -1,17 +1,8 @@
 export interface ClickAction {
   id: string
-  type?: 'coordinate' | 'image'  // default 'coordinate' (backwards-compatible)
-  // coordinate type
   x: number
   y: number
-  // image type
-  imageBase64?: string       // PNG/JPG as base64 data URL
-  imageName?: string         // display name (original filename)
-  confidence?: number        // match threshold 0–1, default 0.8
-  captureX?: number          // screen X where template was captured (center)
-  captureY?: number          // screen Y where template was captured (center)
-  ocrText?: string           // text detected from the image via OCR
-  // common
+  infiniteCount?: boolean  // true = keep clicking until manually stopped
   count: number
   delayBetweenClicks: number
   button: 'left' | 'right' | 'middle'
@@ -29,7 +20,7 @@ export interface ClickTask {
   id: string
   name: string
   actions: ClickAction[]
-  repeatCount: number
+  repeatCount: number        // 0 = unlimited
   delayBetweenActions: number
   recordedTrajectory?: RecordedPoint[]
 }
@@ -37,7 +28,7 @@ export interface ClickTask {
 export interface ScheduleConfig {
   enabled: boolean
   startAt: string | null
-  taskIds: string[]   // tasks to run in sequence
+  taskIds: string[]
 }
 
 export interface HotkeyConfig {
@@ -45,7 +36,7 @@ export interface HotkeyConfig {
 }
 
 export interface AppSettings {
-  hideWindowOnPick: boolean  // whether to auto-hide window during coordinate pick
+  hideWindowOnPick: boolean
 }
 
 export interface AppData {
@@ -59,8 +50,8 @@ export type AppStatus = 'idle' | 'running' | 'scheduled' | string
 export interface ReleaseInfo {
   tag: string
   version: string
-  url: string         // GitHub release page
-  downloadUrl: string // direct asset download URL for current platform/arch
+  url: string
+  downloadUrl: string
   publishedAt: string
   notes: string
 }

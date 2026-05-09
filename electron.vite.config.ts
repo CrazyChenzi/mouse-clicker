@@ -6,8 +6,7 @@ export default defineConfig({
   main: {
     // robotjs: native module, must stay as require() + asarUnpack
     // node-schedule: pure JS but cron-parser (its dep) isn't hoisted by pnpm → bundle inline
-    // jimp: pure JS image processing, bundle inline to avoid pnpm hoisting issues
-    plugins: [externalizeDepsPlugin({ exclude: ['robotjs', 'node-schedule', 'jimp'] })]
+    plugins: [externalizeDepsPlugin({ exclude: ['robotjs', 'node-schedule'] })]
   },
   preload: {
     plugins: [externalizeDepsPlugin()]
@@ -23,8 +22,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve('src/renderer/index.html'),
-          picker: resolve('src/renderer/picker.html'),
-          regionPicker: resolve('src/renderer/regionPicker.html')
+          picker: resolve('src/renderer/picker.html')
         }
       }
     }

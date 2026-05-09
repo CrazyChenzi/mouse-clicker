@@ -35,18 +35,6 @@ const clickerAPI = {
     ipcRenderer.invoke('updater:check'),
   // App version
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
-  // OCR
-  recognizeText: (base64: string): Promise<{ ok: boolean; text: string; error?: string }> =>
-    ipcRenderer.invoke('ocr:recognize', base64),
-  // Image pick
-  pickImage: (): Promise<{ ok: boolean; base64?: string; name?: string; error?: string }> =>
-    ipcRenderer.invoke('image:pick'),
-  // Screen region capture
-  captureRegion: (): Promise<{ ok: boolean; base64?: string; name?: string; centerX?: number; centerY?: number; error?: string }> =>
-    ipcRenderer.invoke('screen:capture-region'),
-  regionPicked: (region: { x: number; y: number; width: number; height: number }) =>
-    ipcRenderer.send('region:picked', region),
-  regionCancel: () => ipcRenderer.send('region:cancel'),
   // Update download
   downloadUpdate: (downloadUrl: string): Promise<{ ok: boolean; filePath?: string; error?: string }> =>
     ipcRenderer.invoke('updater:download', downloadUrl),
